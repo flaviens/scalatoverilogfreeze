@@ -5,7 +5,8 @@ instead of waiting on a Chisel/FIRRTL build every time.
 
 Every config here has been checked with `verilator --lint-only` against its
 **flat** file and reports **0 errors**, so each one parses and elaborates
-standalone with no extra include paths.
+standalone with no extra include paths. Checked twice: Verilator 5.049 on Linux
+(where it was generated) and Verilator 5.046 on macOS (from the committed files).
 
 ## What's here
 
@@ -47,8 +48,18 @@ individual modules.
 
 ```bash
 verilator --lint-only --timing --top-module ChipTop rocket/RocketConfig/flat/RocketConfig.flat.sv
-verilator --lint-only --timing --top-module XSTop   <(gunzip -c xiangshan/DefaultConfig/flat/DefaultConfig.flat.sv.gz)
+
+gunzip -k xiangshan/DefaultConfig/flat/DefaultConfig.flat.sv.gz
+ulimit -s 65520   # see below
+verilator --lint-only --timing --top-module XSTop xiangshan/DefaultConfig/flat/DefaultConfig.flat.sv
 ```
+
+**Raise the stack limit for XiangShan.** The flat XiangShan files are ~105/161 MB
+and Verilator's parser recurses deeply enough to blow the default 8 MB stack on
+macOS, dying with `Verilator internal fault, sorry` (SIGSEGV) rather than a real
+error. `ulimit -s 65520` fixes it. Linux is usually fine because Verilator's
+wrapper script already does `ulimit -s unlimited`. The Rocket/BOOM files are
+small enough not to care.
 
 ## Read this before using the filelists
 
