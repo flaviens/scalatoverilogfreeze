@@ -1,0 +1,5 @@
+//commit 7bf51a8805543878a74f817dd731efde40c30fd2
+//Author: lwd <1045251744@qq.com>
+//Date:   Thu Jul 16 10:04:38 2026 +0800
+//
+//    fix(storeQueue): fix write zero to sbuffer of cbo.zero (#6228)

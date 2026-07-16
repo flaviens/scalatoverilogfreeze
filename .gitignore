@@ -1,0 +1,4 @@
+# Nothing to ignore by default: the point of this repo is the checked-in RTL.
+# Editor/OS noise only.
+.DS_Store
+*.swp

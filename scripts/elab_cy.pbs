@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+#PBS -N cy_elab
+#PBS -q auto
+#PBS -l select=1:ncpus=8:mem=96gb
+#PBS -l walltime=24:00:00
+#PBS -j oe
+#PBS -o /scratch/flavien/chipyardverilog/logs/elab_cy.pbs.log
+
+set -uo pipefail
+W=/scratch/flavien/chipyardverilog
+export HOME=$W/home
+export TMPDIR=$W/tmp
+export XDG_CACHE_HOME=$W/home/.cache
+export COURSIER_CACHE=$W/home/.cache/coursier
+export FIRTOOL_BIN=$W/tools/firtool-1.75.0.d/bin/firtool
+
+# Compute nodes have no /usr/bin/git and no dtc; rocket-chip shells out to dtc.
+source /etc/profile.d/modules.sh 2>/dev/null
+module load git/2.40.0 2>/dev/null
+export PATH=$W/tools/bin:$W/tools/firtool-1.75.0.d/bin:$PATH:/usr/bin:/bin
+
+# chipyard runs `java -jar sbt-launch.jar $(SBT_OPTS)` => SBT_OPTS are PROGRAM args, not JVM args.
+# Leave SBT_OPTS unset so chipyard defaults it to base_dir/.ivy2 + .sbt (both on scratch).
+# OpenJDK reads user.home from getpwuid(), ignoring $HOME, and /home is at quota -> pin via JAVA_TOOL_OPTIONS.
+unset SBT_OPTS
+export JAVA_HEAP_SIZE=48G
+export JAVA_TOOL_OPTIONS="-Xmx48G -Xss256M -XX:MaxMetaspaceSize=2G -Duser.home=$W/home -Djava.io.tmpdir=$W/tmp"
+
+mkdir -p $W/home/.cache/coursier $W/tmp
+echo "host=$(hostname) start=$(date -Is)"
+echo "git=$(git --version) dtc=$(dtc --version 2>&1) firtool=$(firtool --version|grep -i version|head -1)"
+cd $W/chipyard/sims/verilator
+
+CONFIGS="RocketConfig TinyRocketConfig SmallBoomV4Config MediumBoomV4Config LargeBoomV4Config LargeBoomV3Config"
+for C in $CONFIGS; do
+  echo "########## BEGIN $C $(date -Is) ##########"
+  timeout 20000 make verilog CONFIG=$C > $W/logs/elab_$C.log 2>&1
+  rc=$?
+  echo "########## END $C rc=$rc $(date -Is) ##########"
+  if [ $rc -ne 0 ]; then echo "FAILED: $C"; grep -iE "error|caused by|requirement failed" $W/logs/elab_$C.log | head -8; fi
+done
+echo "CY_ELAB_ALL_DONE $(date -Is)"

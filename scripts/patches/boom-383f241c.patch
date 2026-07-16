@@ -1,0 +1,27 @@
+From 383f241cfe3f75d07f327ce37377e6ba66b5aa76 Mon Sep 17 00:00:00 2001
+From: Lux <iansseijelly@berkeley.edu>
+Date: Fri, 5 Dec 2025 17:46:33 -0800
+Subject: [PATCH] fix: connect SNI signals to inner issue units for correct
+ elaboration of Large+BOOM
+
+---
+ src/main/scala/v4/exu/issue-units/issue-unit-banked.scala | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/main/scala/v4/exu/issue-units/issue-unit-banked.scala b/src/main/scala/v4/exu/issue-units/issue-unit-banked.scala
+index 73b697aa..361358b1 100644
+--- a/src/main/scala/v4/exu/issue-units/issue-unit-banked.scala
++++ b/src/main/scala/v4/exu/issue-units/issue-unit-banked.scala
+@@ -41,6 +41,9 @@ class IssueUnitBanked(
+     u.io.flush_pipeline := io.flush_pipeline
+     u.io.squash_grant := io.squash_grant
+     u.io.tsc_reg := io.tsc_reg
++    // for SNI
++    u.io.rob_head := io.rob_head
++    u.io.rob_pnr_idx := io.rob_pnr_idx
+ 
+     u.io.fu_types(0) := io.fu_types(w)
+     u
+-- 
+2.43.5
+

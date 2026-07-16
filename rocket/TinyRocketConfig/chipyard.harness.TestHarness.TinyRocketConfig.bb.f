@@ -1,0 +1,15 @@
+rtl/ClockSourceAtFreqMHz.v
+rtl/EICG_wrapper.v
+rtl/GenericDigitalInIOCell.v
+rtl/GenericDigitalOutIOCell.v
+rtl/SimJTAG.cc
+rtl/SimJTAG.v
+rtl/SimTSI.cc
+rtl/SimTSI.v
+rtl/SimUART.cc
+rtl/SimUART.v
+rtl/plusarg_reader.v
+rtl/remote_bitbang.cc
+rtl/testchip_htif.cc
+rtl/testchip_tsi.cc
+rtl/uart.cc

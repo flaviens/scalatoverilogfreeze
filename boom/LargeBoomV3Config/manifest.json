@@ -1,0 +1,36 @@
+{
+  "design": "boom",
+  "config": "LargeBoomV3Config",
+  "top_module": "ChipTop",
+  "harness_top": "TestHarness",
+  "generator": {
+    "repo": "https://github.com/ucb-bar/chipyard",
+    "tag": "1.14.0",
+    "commit": "0acc1e1de2d3284bcd4d876956932a013ffe1949",
+    "boom_submodule_commit": "5223e44cfeb26f41380057a2eb4d651197475f69"
+  },
+  "toolchain": {
+    "firtool": "CIRCT firtool-1.75.0 (pinned by chipyard conda-reqs/circt.json)",
+    "chisel": "6.7.0",
+    "scala": "2.13.16",
+    "jdk": "OpenJDK 11.0.23"
+  },
+  "build_command": "make verilog CONFIG=LargeBoomV3Config  (from chipyard/sims/verilator)",
+  "frozen_on": "2026-07-16T12:53:18+08:00",
+  "contents": {
+    "rtl/": "633 as-generated SystemVerilog/Verilog sources (firtool --split-verilog), including chipyard.harness.TestHarness.LargeBoomV3Config.top.mems.v",
+    "flat/LargeBoomV3Config.flat.sv": "single-file ChipTop: chipyard.harness.TestHarness.LargeBoomV3Config.top.f order + top.mems.v (615 modules)",
+    "meta/": "FIRRTL (.fir.gz), device tree (.dts), firrtl annotations, SRAM conf, regmaps, module graph",
+    "chipyard.harness.TestHarness.LargeBoomV3Config.top.f": "filelist: ChipTop SoC (the DUT). NOTE: does not list the SRAM models.",
+    "chipyard.harness.TestHarness.LargeBoomV3Config.all.f": "filelist: ChipTop + TestHarness",
+    "chipyard.harness.TestHarness.LargeBoomV3Config.bb.f": "filelist: blackboxes + simulation-only models (SimDRAM/SimJTAG)",
+    "sim_files.common.f": "filelist: everything needed to simulate (includes top.mems.v)"
+  },
+  "notes": [
+    "SRAMs are behavioral models in chipyard.harness.TestHarness.LargeBoomV3Config.top.mems.v (firtool --repl-seq-mem). Fine for simulation/formal; not synthesizable to a PDK without SRAM replacement.",
+    "chipyard's top.f omits top.mems.v; flat/ appends it so the single file elaborates standalone. If you compile from rtl/ + a filelist, use sim_files.common.f, not top.f alone.",
+    "flat/ excludes .cc verilator shims and the TestHarness/TestDriver.",
+    "Paths in the .f files are rewritten relative to this config directory.",
+    "Verified: verilator --lint-only --top-module ChipTop on flat/ reports 0 errors."
+  ]
+}
