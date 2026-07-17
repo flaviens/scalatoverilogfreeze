@@ -1,0 +1,26 @@
+host=IN-005 config=RocketConfig start=2026-07-16T14:32:18+08:00
+Verilator 5.022 2024-02-24 rev conda-forge build 1
+g++ (conda-forge gcc 13.2.0-13) 13.2.0
+rtl_md5_before=1f5a12b995d3c74ad99b56fa6e07e72a
+########## BUILD SIM RocketConfig 2026-07-16T14:32:21+08:00 ##########
+build rc=0 2026-07-16T14:33:22+08:00
+rtl_md5_after=1f5a12b995d3c74ad99b56fa6e07e72a
+RTL_UNCHANGED: yes (simulating exactly the frozen RTL)
+sim binary: /scratch/flavien/chipyardverilog/chipyard/sims/verilator/simulator-chipyard.harness-RocketConfig
+########## RUN TESTS RocketConfig 2026-07-16T14:33:22+08:00 ##########
+  PASS rv64ui-p-add
+  PASS rv64ui-p-simple
+  PASS rv64ui-p-lw
+  PASS rv64ui-p-sw
+  PASS rv64ui-p-beq
+  PASS rv64ui-p-jal
+  PASS rv64um-p-mul
+  PASS rv64um-p-div
+  PASS rv64ua-p-amoadd_w
+  PASS rv64uf-p-fadd
+  PASS rv64ud-p-fadd
+  PASS rv64mi-p-csr
+  PASS rv64si-p-csr
+  PASS rv64uc-p-rvc
+TESTS RocketConfig: pass=14 fail=0 skip=0
+CY_SIM_DONE RocketConfig 2026-07-16T14:39:45+08:00

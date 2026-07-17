@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+#PBS -N xs_diag
+#PBS -q auto_free
+#PBS -l select=1:ncpus=16:mem=100gb
+#PBS -l walltime=12:00:00
+#PBS -j oe
+#PBS -o /scratch/flavien/chipyardverilog/logs/diag_xs.log
+
+# Verilate MinimalConfig XSTop with the instrumented TB ONCE, then run several
+# short experiments (varying reset length) to find where it stalls.
+set -uo pipefail
+W=/scratch/flavien/chipyardverilog
+CYB=$W/mamba/envs/cy-base
+export HOME=$W/home TMPDIR=$W/tmp
+export PATH=$CYB/bin:$W/tools/bin:$PATH:/usr/bin:/bin
+export LD_LIBRARY_PATH=$CYB/lib:${LD_LIBRARY_PATH:-}
+
+D=$W/xstop-tb/diag; mkdir -p $D; cd $D
+FLAT=$W/out/xiangshan/MinimalConfig/flat/MinimalConfig.flat.sv
+[ -f "$FLAT" ] || { gunzip -c "$FLAT.gz" > $D/M.flat.sv; FLAT=$D/M.flat.sv; }
+
+echo "host=$(hostname) start=$(date -Is)"
+ulimit -s unlimited 2>/dev/null
+echo "########## VERILATE (instrumented) $(date -Is) ##########"
+timeout 30000 verilator --binary --timing -j 16 \
+  -Wno-fatal -Wno-WIDTH -Wno-UNOPTFLAT -Wno-BLKANDNBLK \
+  --top-module tb -O1 --x-assign fast --x-initial fast --output-split 10000 \
+  -o Vtb_diag $W/tb_xstop_diag.sv "$FLAT" > $D/verilate.log 2>&1
+rc=$?; echo "verilate rc=$rc $(date -Is)"
+[ $rc -ne 0 ] && { grep "%Error" $D/verilate.log|head; exit 1; }
+
+run() {  # label reset_cycles max_cycles
+  echo "########## RUN $1 (reset_cycles=$2 max_cycles=$3) $(date -Is) ##########"
+  timeout 6000 ./obj_dir/Vtb_diag +hex=$W/xstop-tb/prog.hex \
+     +reset_cycles=$2 +max_cycles=$3 +log_ar=40 > $D/run_$1.log 2>&1
+  echo "  exit=$?"
+  grep -E "^\[TB\]|^\[AR\]|XSTOP_RESULT" $D/run_$1.log | head -60
+}
+
+# Experiment 1: default reset, short run, full AR logging -> see fetch pattern
+run short 200 300000
+# Experiment 2: long reset in case reset propagation is the issue
+run longreset 5000 300000
+
+echo "XS_DIAG_DONE $(date -Is)"

@@ -1,0 +1,26 @@
+From cf8e6d7ac36bd252ccc2a41767588634228da73b Mon Sep 17 00:00:00 2001
+From: Lux <iansseijelly@berkeley.edu>
+Date: Sat, 27 Dec 2025 16:39:47 -0800
+Subject: [PATCH] fix: fall back to non-matrix issue for now
+
+---
+ src/main/scala/v4/exu/issue-units/issue-unit.scala | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/main/scala/v4/exu/issue-units/issue-unit.scala b/src/main/scala/v4/exu/issue-units/issue-unit.scala
+index 231fc693..dbea82a8 100644
+--- a/src/main/scala/v4/exu/issue-units/issue-unit.scala
++++ b/src/main/scala/v4/exu/issue-units/issue-unit.scala
+@@ -26,7 +26,8 @@ case class IssueParams(
+   numEntries: Int = 8,
+   useFullIssueSel: Boolean = true,
+   numSlowEntries: Int = 0,
+-  useMatrixIssue: Boolean = true,
++  // useMatrixIssue: Boolean = true,
++  useMatrixIssue: Boolean = false,
+   iqType: Int
+ )
+ 
+-- 
+2.43.5
+

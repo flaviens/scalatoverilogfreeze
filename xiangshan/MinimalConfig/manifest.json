@@ -29,5 +29,12 @@
     "flat/ is gzipped because the raw file is 101-155 MB, over GitHub's 100 MB per-file limit. gunzip -k flat/MinimalConfig.flat.sv.gz to use it.",
     "XSTop.fir (FIRRTL, 1.0-1.5 GB raw) is intentionally not frozen. Regenerate with the build_command above if needed.",
     "Verified: verilator --lint-only --top-module XSTop on flat/ reports 0 errors."
-  ]
+  ],
+  "simulation": {
+    "tool": "verilator 5.022, standalone testbench (sim/tb_xstop.sv) driving XSTop with an AXI4 DRAM model",
+    "result": "PARTIAL \u2014 XSTop builds into a cycle-accurate simulator, comes out of reset, and fetches the reset-vector cachelines (0x80000000/40/80/c0) correctly through its L1I/L2/AXI hierarchy, but does not retire to WFI standalone.",
+    "evidence": "sim/results/xiangshan_MinimalConfig_XSTop.log: 4 memory read bursts at the reset vector, then no commit/store/further-fetch. Reset duration (200 vs 5000 cycles) does not change it; no peripheral polling occurs.",
+    "why": "XSTop is XiangShan's FPGA-platform SoC top and expects XiangShan's own boot environment (SimTop/difftest or the FPGA harness) to complete bring-up; a bare AXI memory is not sufficient to drive it to instruction retirement.",
+    "note": "This is a limitation of standalone bring-up, not of the frozen RTL: the fetch path is proven to elaborate and function. Rocket/BOOM use chipyard's TestHarness+fesvr, which handles bring-up, hence full ISA-test execution there."
+  }
 }

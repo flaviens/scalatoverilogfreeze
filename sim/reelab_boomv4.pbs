@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+#PBS -N boomv4_fix
+#PBS -q auto_free
+#PBS -l select=1:ncpus=16:mem=50gb
+#PBS -l walltime=12:00:00
+#PBS -j oe
+#PBS -o /scratch/flavien/chipyardverilog/logs/reelab_boomv4.log
+
+# Re-elaborate LargeBoomV4Config with BOTH upstream BOOM fixes
+# (383f241c connect-SNI + cf8e6d7a non-matrix-issue), then build the sim and
+# run the ISA tests, to find out whether the pipeline hang is actually fixed.
+set -uo pipefail
+W=/scratch/flavien/chipyardverilog
+C=LargeBoomV4Config
+
+export HOME=$W/home
+export TMPDIR=$W/tmp
+export RISCV=$W/rvtools
+CYB=$W/mamba/envs/cy-base
+RVT=$W/mamba/envs/riscv-tools/riscv-tools
+
+source /etc/profile.d/modules.sh 2>/dev/null
+module load git/2.40.0 2>/dev/null
+export PATH=$CYB/bin:$RVT/bin:$RISCV/bin:$W/tools/bin:$W/tools/firtool-1.75.0.d/bin:$PATH:/usr/bin:/bin
+export LD_LIBRARY_PATH=$CYB/lib:$RISCV/lib:${LD_LIBRARY_PATH:-}
+export CC=$CYB/bin/gcc
+export CXX=$CYB/bin/g++
+export FIRTOOL_BIN=$W/tools/firtool-1.75.0.d/bin/firtool
+unset SBT_OPTS
+export JAVA_HEAP_SIZE=48G
+export JAVA_TOOL_OPTIONS="-Xmx48G -Xss256M -XX:MaxMetaspaceSize=2G -Duser.home=$W/home -Djava.io.tmpdir=$W/tmp"
+
+LOG=$W/logs/reelab_$C
+mkdir -p $LOG
+echo "host=$(hostname) start=$(date -Is)"
+echo "--- boom patch state ---"
+git -C $W/chipyard/generators/boom status --porcelain
+grep -n "useMatrixIssue: Boolean" $W/chipyard/generators/boom/src/main/scala/v4/exu/issue-units/issue-unit.scala | head -2
+grep -c "u.io.rob_head := io.rob_head" $W/chipyard/generators/boom/src/main/scala/v4/exu/issue-units/issue-unit-banked.scala
+
+D=$W/chipyard/sims/verilator/generated-src/chipyard.harness.TestHarness.$C
+rm -rf $D
+cd $W/chipyard/sims/verilator
+
+echo "########## RE-ELABORATE $C $(date -Is) ##########"
+timeout 20000 make verilog CONFIG=$C > $LOG/elab.log 2>&1
+rc=$?; echo "elab rc=$rc $(date -Is)"
+if [ $rc -ne 0 ]; then echo "ELAB FAILED"; grep -iE "error:" $LOG/elab.log | head -5; echo "REELAB_DONE"; exit 1; fi
+
+echo "--- which issue unit got elaborated? ---"
+ls $D/gen-collateral/ | grep -icE "IssueUnitAgeMatrix" | sed 's/^/matrix modules: /'
+ls $D/gen-collateral/ | grep -icE "IssueUnitCollapsing" | sed 's/^/collapsing modules: /'
+
+echo "########## BUILD SIM $C $(date -Is) ##########"
+timeout 25000 make -j16 CONFIG=$C > $LOG/build.log 2>&1
+rc=$?; echo "build rc=$rc $(date -Is)"
+SIM=$W/chipyard/sims/verilator/simulator-chipyard.harness-$C
+[ -x "$SIM" ] || { echo "NO SIM BINARY"; echo "REELAB_DONE"; exit 1; }
+
+ISA=$RISCV/riscv64-unknown-elf/share/riscv-tests/isa
+TESTS="rv64ui-p-add rv64ui-p-simple rv64ui-p-lw rv64ui-p-sw rv64ui-p-beq rv64ui-p-jal rv64um-p-mul rv64um-p-div rv64ua-p-amoadd_w rv64uf-p-fadd rv64ud-p-fadd rv64mi-p-csr rv64si-p-csr rv64uc-p-rvc"
+pass=0; fail=0
+echo "########## RUN TESTS $C $(date -Is) ##########"
+for t in $TESTS; do
+  timeout 900 $SIM +permissive +permissive-off $ISA/$t > $LOG/$t.out 2>&1
+  if [ $? -eq 0 ]; then echo "  PASS $t"; pass=$((pass+1)); else echo "  FAIL $t"; tail -2 $LOG/$t.out|sed 's/^/       /'; fail=$((fail+1)); fi
+done
+echo "TESTS $C: pass=$pass fail=$fail"
+echo "REELAB_DONE $(date -Is)"

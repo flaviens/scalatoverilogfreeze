@@ -1,0 +1,17 @@
+Core  0's Commit SHA is: 7bf51a8805, dirty: 0
+[TB] loaded /scratch/flavien/chipyardverilog/xstop-tb/prog.hex, rst_vec=0x80000000, max_cycles=300000
+[TB] mem[0]=04b70143941343850a6292634309401102b30a4197634231002081b3411d4095
+[TB] reset released at 399000
+[AR] mem #1 addr=0x000080000000 len=1 size=5 @cyc 2059
+[AR] mem #2 addr=0x000080000040 len=1 size=5 @cyc 2064
+[AR] mem #3 addr=0x000080000080 len=1 size=5 @cyc 2069
+[AR] mem #4 addr=0x0000800000c0 len=1 size=5 @cyc 2074
+[TB] cycle 50000: mem_ar=4 read_beats=8 write_beats=0 periph_rd=0 periph_wr=0 wfi=0
+[TB] cycle 100000: mem_ar=4 read_beats=8 write_beats=0 periph_rd=0 periph_wr=0 wfi=0
+[TB] cycle 150000: mem_ar=4 read_beats=8 write_beats=0 periph_rd=0 periph_wr=0 wfi=0
+[TB] cycle 200000: mem_ar=4 read_beats=8 write_beats=0 periph_rd=0 periph_wr=0 wfi=0
+[TB] cycle 250000: mem_ar=4 read_beats=8 write_beats=0 periph_rd=0 periph_wr=0 wfi=0
+[TB] cycle 300000: mem_ar=4 read_beats=8 write_beats=0 periph_rd=0 periph_wr=0 wfi=0
+[TB] timeout at cycle 300001; read_beats=8 write_beats=0 first_fetch_line=0
+XSTOP_RESULT: FAIL (timeout, no WFI)
+- /scratch/flavien/chipyardverilog/tb_xstop_diag.sv:329: Verilog $finish

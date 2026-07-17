@@ -208,10 +208,10 @@ rtl/IntXbar_i4_o1.sv
 rtl/IssueSlot_16.sv
 rtl/IssueSlot_8.sv
 rtl/IssueSlot.sv
-rtl/IssueUnitAgeMatrix_1.sv
-rtl/IssueUnitAgeMatrix_2.sv
-rtl/IssueUnitAgeMatrix_3.sv
-rtl/IssueUnitAgeMatrix.sv
+rtl/IssueUnitCollapsing_1.sv
+rtl/IssueUnitCollapsing_2.sv
+rtl/IssueUnitCollapsing_3.sv
+rtl/IssueUnitCollapsing.sv
 rtl/ITLB.sv
 rtl/JtagBypassChain.sv
 rtl/JtagStateMachine.sv

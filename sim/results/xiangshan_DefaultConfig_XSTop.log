@@ -1,0 +1,12 @@
+Core  0's Commit SHA is: 7bf51a8805, dirty: 0
+[TB] loaded /scratch/flavien/chipyardverilog/xstop-tb/prog.hex, rst_vec=0x80000000, max_cycles=2000000
+[TB] mem[0]=04b70143941343850a6292634309401102b30a4197634231002081b3411d4095
+[TB] reset released at 399000
+[TB] cycle 50000: read_beats=18 write_beats=0 first_fetch_line=8 wfi=0
+[TB] cycle 100000: read_beats=18 write_beats=0 first_fetch_line=8 wfi=0
+[TB] cycle 150000: read_beats=18 write_beats=0 first_fetch_line=8 wfi=0
+[TB] cycle 200000: read_beats=18 write_beats=0 first_fetch_line=8 wfi=0
+[TB] cycle 250000: read_beats=18 write_beats=0 first_fetch_line=8 wfi=0
+[TB] cycle 300000: read_beats=18 write_beats=0 first_fetch_line=8 wfi=0
+[TB] cycle 350000: read_beats=18 write_beats=0 first_fetch_line=8 wfi=0
+[TB] cycle 400000: read_beats=18 write_beats=0 first_fetch_line=8 wfi=0

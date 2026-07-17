@@ -1,0 +1,26 @@
+host=IN-005 config=LargeBoomV3Config start=2026-07-16T14:55:12+08:00
+Verilator 5.022 2024-02-24 rev conda-forge build 1
+g++ (conda-forge gcc 13.2.0-13) 13.2.0
+rtl_md5_before=df187a59d233484495ea6d05761165ea
+########## BUILD SIM LargeBoomV3Config 2026-07-16T14:55:15+08:00 ##########
+build rc=0 2026-07-16T14:56:55+08:00
+rtl_md5_after=df187a59d233484495ea6d05761165ea
+RTL_UNCHANGED: yes (simulating exactly the frozen RTL)
+sim binary: /scratch/flavien/chipyardverilog/chipyard/sims/verilator/simulator-chipyard.harness-LargeBoomV3Config
+########## RUN TESTS LargeBoomV3Config 2026-07-16T14:56:55+08:00 ##########
+  PASS rv64ui-p-add
+  PASS rv64ui-p-simple
+  PASS rv64ui-p-lw
+  PASS rv64ui-p-sw
+  PASS rv64ui-p-beq
+  PASS rv64ui-p-jal
+  PASS rv64um-p-mul
+  PASS rv64um-p-div
+  PASS rv64ua-p-amoadd_w
+  PASS rv64uf-p-fadd
+  PASS rv64ud-p-fadd
+  PASS rv64mi-p-csr
+  PASS rv64si-p-csr
+  PASS rv64uc-p-rvc
+TESTS LargeBoomV3Config: pass=14 fail=0 skip=0
+CY_SIM_DONE LargeBoomV3Config 2026-07-16T15:10:55+08:00

@@ -2641,8 +2641,8 @@
   },
   {
     "class":"firrtl.transforms.DedupGroupAnnotation",
-    "target":"~TestHarness|IssueUnitAgeMatrix",
-    "group":"IssueUnitAgeMatrix"
+    "target":"~TestHarness|IssueUnitCollapsing",
+    "group":"IssueUnitCollapsing"
   },
   {
     "class":"firrtl.transforms.DedupGroupAnnotation",
@@ -2801,8 +2801,8 @@
   },
   {
     "class":"firrtl.transforms.DedupGroupAnnotation",
-    "target":"~TestHarness|IssueUnitAgeMatrix_1",
-    "group":"IssueUnitAgeMatrix"
+    "target":"~TestHarness|IssueUnitCollapsing_1",
+    "group":"IssueUnitCollapsing"
   },
   {
     "class":"firrtl.transforms.DedupGroupAnnotation",
@@ -2866,8 +2866,8 @@
   },
   {
     "class":"firrtl.transforms.DedupGroupAnnotation",
-    "target":"~TestHarness|IssueUnitAgeMatrix_2",
-    "group":"IssueUnitAgeMatrix"
+    "target":"~TestHarness|IssueUnitCollapsing_2",
+    "group":"IssueUnitCollapsing"
   },
   {
     "class":"firrtl.transforms.DedupGroupAnnotation",
@@ -2971,8 +2971,8 @@
   },
   {
     "class":"firrtl.transforms.DedupGroupAnnotation",
-    "target":"~TestHarness|IssueUnitAgeMatrix_3",
-    "group":"IssueUnitAgeMatrix"
+    "target":"~TestHarness|IssueUnitCollapsing_3",
+    "group":"IssueUnitCollapsing"
   },
   {
     "class":"firrtl.transforms.DedupGroupAnnotation",

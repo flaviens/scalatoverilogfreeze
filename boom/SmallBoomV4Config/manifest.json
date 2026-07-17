@@ -7,7 +7,19 @@
     "repo": "https://github.com/ucb-bar/chipyard",
     "tag": "1.14.0",
     "commit": "0acc1e1de2d3284bcd4d876956932a013ffe1949",
-    "boom_submodule_commit": "5223e44cfeb26f41380057a2eb4d651197475f69"
+    "boom_submodule_commit": "5223e44cfeb26f41380057a2eb4d651197475f69",
+    "boom_patches_applied": [
+      {
+        "source": "riscv-boom 383f241c",
+        "file": "scripts/patches/boom-383f241c.patch",
+        "why": "IssueUnitBanked leaves rob_head/rob_pnr_idx unconnected; without this firtool fails to elaborate LargeBoomV4Config"
+      },
+      {
+        "source": "riscv-boom cf8e6d7a",
+        "file": "scripts/patches/boom-cf8e6d7a.patch",
+        "why": "matrix issue unit hangs at runtime; upstream falls back to the collapsing issue unit (useMatrixIssue=false). Without it BOOM v4 elaborates and lints but the pipeline hangs in simulation."
+      }
+    ]
   },
   "toolchain": {
     "firtool": "CIRCT firtool-1.75.0 (pinned by chipyard conda-reqs/circt.json)",
@@ -16,7 +28,7 @@
     "jdk": "OpenJDK 11.0.23"
   },
   "build_command": "make verilog CONFIG=SmallBoomV4Config  (from chipyard/sims/verilator)",
-  "frozen_on": "2026-07-16T12:52:20+08:00",
+  "frozen_on": "2026-07-16T17:17:16+08:00",
   "contents": {
     "rtl/": "613 as-generated SystemVerilog/Verilog sources (firtool --split-verilog), including chipyard.harness.TestHarness.SmallBoomV4Config.top.mems.v",
     "flat/SmallBoomV4Config.flat.sv": "single-file ChipTop: chipyard.harness.TestHarness.SmallBoomV4Config.top.f order + top.mems.v (595 modules)",
@@ -32,5 +44,11 @@
     "flat/ excludes .cc verilator shims and the TestHarness/TestDriver.",
     "Paths in the .f files are rewritten relative to this config directory.",
     "Verified: verilator --lint-only --top-module ChipTop on flat/ reports 0 errors."
-  ]
+  ],
+  "simulation": {
+    "tool": "verilator 5.022 (chipyard TestHarness + riscv-tools/fesvr)",
+    "riscv_tests": "14/14 PASS",
+    "tests_run": "rv64ui-p-{add,simple,lw,sw,beq,jal}, rv64um-p-{mul,div}, rv64ua-p-amoadd_w, rv64uf-p-fadd, rv64ud-p-fadd, rv64mi-p-csr, rv64si-p-csr, rv64uc-p-rvc",
+    "note": "Simulated from this exact frozen RTL (gen-collateral md5 verified identical to rtl/). Uses the collapsing issue unit after the two BOOM patches."
+  }
 }

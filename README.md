@@ -3,23 +3,26 @@
 Pre-elaborated RTL for three RISC-V cores, so experiments can start from Verilog
 instead of waiting on a Chisel/FIRRTL build every time.
 
-Every config here has been checked with `verilator --lint-only` against its
-**flat** file and reports **0 errors**, so each one parses and elaborates
-standalone with no extra include paths. Checked twice: Verilator 5.049 on Linux
-(where it was generated) and Verilator 5.046 on macOS (from the committed files).
+Every config is checked two ways. **Lint:** `verilator --lint-only` on the flat
+file reports **0 errors** — on Verilator 5.049 (Linux, where it was generated)
+and again on 5.046 (macOS, from the committed files). **Simulation:** every
+Rocket and BOOM config boots and passes 14/14 RISC-V ISA tests; XiangShan builds
+into a working simulator and fetches from its reset vector (see
+[Simulation](#simulation) for the full story). RTL that both lints and runs is a
+much stronger guarantee than "it elaborated".
 
 ## What's here
 
-| Design | Config | Top | Modules (flat) | Notes |
-|---|---|---|---|---|
-| Rocket | `RocketConfig` | `ChipTop` | 432 | dual-core RV64GC |
-| Rocket | `TinyRocketConfig` | `ChipTop` | 278 | smallest Rocket |
-| BOOM | `SmallBoomV4Config` | `ChipTop` | 595 | BOOM **v4** |
-| BOOM | `MediumBoomV4Config` | `ChipTop` | 598 | BOOM **v4** |
-| BOOM | `LargeBoomV4Config` | `ChipTop` | 628 | BOOM **v4**, needs a patch (below) |
-| BOOM | `LargeBoomV3Config` | `ChipTop` | 615 | BOOM **v3**, kept because much prior work targets v3 |
-| XiangShan | `MinimalConfig` | `XSTop` | 1911 | |
-| XiangShan | `DefaultConfig` | `XSTop` | 2009 | full Kunminghu-class core |
+| Design | Config | Top | Modules (flat) | ISA tests | Notes |
+|---|---|---|---|---|---|
+| Rocket | `RocketConfig` | `ChipTop` | 432 | 14/14 | dual-core RV64GC |
+| Rocket | `TinyRocketConfig` | `ChipTop` | 278 | 14/14 | smallest Rocket |
+| BOOM | `SmallBoomV4Config` | `ChipTop` | 595 | 14/14 | BOOM **v4** (+2 patches) |
+| BOOM | `MediumBoomV4Config` | `ChipTop` | 598 | 14/14 | BOOM **v4** (+2 patches) |
+| BOOM | `LargeBoomV4Config` | `ChipTop` | 628 | 14/14 | BOOM **v4** (+2 patches) |
+| BOOM | `LargeBoomV3Config` | `ChipTop` | 615 | 14/14 | BOOM **v3**, kept because much prior work targets v3 |
+| XiangShan | `MinimalConfig` | `XSTop` | 1911 | fetches (see below) | |
+| XiangShan | `DefaultConfig` | `XSTop` | 2009 | fetches (see below) | full Kunminghu-class core |
 
 ### Provenance
 
@@ -90,31 +93,89 @@ from `rtl/` yourself.
 - **XiangShan FIRRTL is not included** (`XSTop.fir` is 1.0–1.5 GB raw). Chipyard's
   is, gzipped, in `meta/`.
 
-## The one patch we applied
+## Simulation
 
-`LargeBoomV4Config` **does not elaborate** at chipyard 1.14.0's pinned BOOM
-(`5223e44c`). `IssueUnitBanked` forwards signals to its issue columns but never
-connects `rob_head`/`rob_pnr_idx`, so firtool fails:
+Beyond linting, the frozen RTL was built into cycle-accurate Verilator simulators
+and made to run real RISC-V code. Everything here — RISC-V toolchain, `libfesvr`,
+the test binaries — is the conda `riscv-tools` stack that chipyard itself pins;
+scripts are in [sim/](sim/) and raw logs in [sim/results/](sim/results/).
+
+**Rocket and BOOM — 14/14 ISA tests each.** Each config was built with chipyard's
+own Verilator TestHarness (which links `fesvr` and loads programs the normal way)
+and run against 14 `riscv-tests` spanning every extension the cores implement:
+base integer (`add`, `simple`, `lw`, `sw`, `beq`, `jal`), `M` (`mul`, `div`),
+`A` (`amoadd_w`), `F`/`D` (`fadd`), machine- and supervisor-mode CSRs, and
+compressed (`rvc`). All six configs pass all 14. Crucially, each simulator was
+built from RTL whose `gen-collateral` was checksummed identical to this repo's
+`rtl/` (see [sim/checksum_rtl.sh](sim/checksum_rtl.sh)), so the tests exercise the
+*frozen* Verilog, not a fresh re-elaboration.
+
+**XiangShan — builds, resets, and fetches; does not retire standalone.** XSTop is
+XiangShan's FPGA-platform SoC top and exposes raw AXI4 master ports, not a test
+harness. A standalone testbench ([sim/tb_xstop.sv](sim/tb_xstop.sv)) wraps it in
+an AXI4 DRAM model, points the reset vector at a small program, and watches
+`io_riscv_wfi_0` for completion. Both configs verilate cleanly and, out of reset,
+issue correct instruction fetches to the reset vector through the full L1I → L2 →
+AXI path:
 
 ```
-issue-unit-banked.scala:33:13: error: sink "col_0.io_rob_head" not fully initialized in "IssueUnitBanked"
+[AR] mem #1 addr=0x80000000 len=1 size=5   (64-byte burst)
+[AR] mem #2 addr=0x80000040 ...
+[AR] mem #3 addr=0x80000080 ...
+[AR] mem #4 addr=0x800000c0 ...
 ```
 
-Only the Large config uses the banked issue unit, which is why Small/Medium build
-fine. We applied the upstream fix — riscv-boom
-[`383f241c`](https://github.com/riscv-boom/riscv-boom/commit/383f241c), *"connect
-SNI signals to inner issue units for correct elaboration of Large+BOOM"*, a 3-line
-change — kept in [scripts/patches/boom-383f241c.patch](scripts/patches/boom-383f241c.patch).
+…but then the pipeline does not commit — no stores, no WFI, no peripheral polling —
+regardless of reset length (200 vs 5000 cycles is identical). This is a bring-up
+limitation, not an RTL defect: XSTop expects XiangShan's own boot environment
+(`SimTop`/difftest, or the FPGA harness) to finish initialization, which a bare
+AXI memory doesn't provide. The fetch path is proven to elaborate and function;
+full instruction retirement would need XiangShan's harness, which builds a
+*different* top (`SimTop`) than the `XSTop` frozen here. Logs:
+[sim/results/xiangshan_MinimalConfig_XSTop.log](sim/results/xiangshan_MinimalConfig_XSTop.log).
 
-So `LargeBoomV4Config` is **chipyard 1.14.0 + that one upstream BOOM patch**.
-Every other config is stock 1.14.0.
+## The two BOOM v4 patches
+
+chipyard 1.14.0's pinned BOOM (`5223e44c`) has two bugs in the v4 issue unit that
+had to be fixed for the v4 family to work. Both fixes are upstream commits, kept
+in [scripts/patches/](scripts/patches/), and both were found here by actually
+elaborating and *running* the RTL — the first by elaboration, the second only by
+simulation.
+
+1. **Doesn't elaborate** ([`383f241c`](https://github.com/riscv-boom/riscv-boom/commit/383f241c),
+   *"connect SNI signals to inner issue units"*). `IssueUnitBanked` forwards
+   signals to its issue columns but never connects `rob_head`/`rob_pnr_idx`, so
+   firtool rejects `LargeBoomV4Config`:
+   ```
+   issue-unit-banked.scala:33:13: error: sink "col_0.io_rob_head" not fully initialized in "IssueUnitBanked"
+   ```
+   Only Large uses the banked path, so Small/Medium elaborate without it.
+
+2. **Elaborates and lints, but hangs in simulation**
+   ([`cf8e6d7a`](https://github.com/riscv-boom/riscv-boom/commit/cf8e6d7a),
+   *"fall back to non-matrix issue for now"*). With only the first patch,
+   `LargeBoomV4Config` builds and lints clean but every ISA test dies with
+   `Assertion failed: Pipeline has hung` — the `IssueUnitAgeMatrix` unit
+   (`useMatrixIssue=true` by default) is broken. Upstream flips the default to
+   the `IssueUnitCollapsing` unit. This affects the whole v4 family, so all three
+   v4 configs are frozen with it; they now use `IssueUnitCollapsing` and pass 14/14.
+
+So the three **BOOM v4** configs are **chipyard 1.14.0 + these two upstream BOOM
+patches**. `LargeBoomV3Config` and both Rocket configs are stock 1.14.0.
+
+This is the case for running the RTL, not just elaborating it: bug #2 is invisible
+to elaboration and to lint. It only showed up when the frozen RTL was made to
+execute instructions.
 
 ## Reproducing
 
 `scripts/` holds everything used to build this, in order: `setup_*.sh` (clone +
 submodules), `elab_*.pbs` (elaboration on PBS), `collect_*.sh` (assemble these
 trees), `verify2.sh` (byte-level completeness check), `lint*.sh` (the Verilator
-check).
+check). `sim/` holds the simulation harness: `build_rvtools.pbs` (spike/`libfesvr`
++ `riscv-tests`), `sim_cy.pbs` (build+run the chipyard configs), `tb_xstop.sv` +
+`sim_xs.pbs` (the XiangShan testbench), and `checksum_rtl.sh` (proves the sim ran
+the frozen RTL). The two BOOM patches live in `scripts/patches/`.
 
 Build environment notes, which cost some time to work out on `vanda`:
 

@@ -222,11 +222,11 @@ rtl/IntXbar_i4_o1.sv
 rtl/IssueSlot_24.sv
 rtl/IssueSlot_40.sv
 rtl/IssueSlot.sv
-rtl/IssueUnitAgeMatrix_1.sv
-rtl/IssueUnitAgeMatrix_2.sv
-rtl/IssueUnitAgeMatrix_3.sv
-rtl/IssueUnitAgeMatrix.sv
 rtl/IssueUnitBanked.sv
+rtl/IssueUnitCollapsing_1.sv
+rtl/IssueUnitCollapsing_2.sv
+rtl/IssueUnitCollapsing_3.sv
+rtl/IssueUnitCollapsing.sv
 rtl/ITLB.sv
 rtl/JtagBypassChain.sv
 rtl/JtagStateMachine.sv

@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+#PBS -N xs_sim
+#PBS -q auto_free
+#PBS -l select=1:ncpus=16:mem=100gb
+#PBS -l walltime=12:00:00
+#PBS -j oe
+
+# Build+run a verilator simulation of the FROZEN XiangShan XSTop (from the repo's
+# flat file) driven by tb_xstop.sv, executing a real RV64 program from DRAM.
+# CONFIG passed via: qsub -v CONFIG=MinimalConfig
+set -uo pipefail
+W=/scratch/flavien/chipyardverilog
+C=${CONFIG:?CONFIG must be set}
+
+export HOME=$W/home
+export TMPDIR=$W/tmp
+CYB=$W/mamba/envs/cy-base
+export PATH=$CYB/bin:$W/tools/bin:$PATH:/usr/bin:/bin
+export LD_LIBRARY_PATH=$CYB/lib:${LD_LIBRARY_PATH:-}
+
+D=$W/xstop-tb/$C
+mkdir -p $D
+cd $D
+
+FLAT=$W/out/xiangshan/$C/flat/$C.flat.sv
+if [ ! -f "$FLAT" ]; then
+  gunzip -c "$FLAT.gz" > $D/$C.flat.sv 2>/dev/null && FLAT=$D/$C.flat.sv
+fi
+
+echo "host=$(hostname) config=$C start=$(date -Is)"
+verilator --version
+echo "flat: $FLAT ($(stat -c %s "$FLAT") bytes)"
+md5sum "$FLAT" | cut -d' ' -f1 | sed 's/^/flat_md5=/'
+
+echo "########## VERILATE $C $(date -Is) ##########"
+ulimit -s unlimited 2>/dev/null
+timeout 30000 verilator --binary --timing -j 16 \
+  -Wno-fatal -Wno-WIDTH -Wno-UNOPTFLAT -Wno-BLKANDNBLK \
+  --top-module tb \
+  -O1 --x-assign fast --x-initial fast \
+  --output-split 10000 \
+  -o Vtb \
+  $W/tb_xstop.sv "$FLAT" > $D/verilate.log 2>&1
+rc=$?
+echo "verilate rc=$rc $(date -Is)"
+if [ $rc -ne 0 ]; then echo "VERILATE FAILED"; grep -iE "%Error" $D/verilate.log | head -8; echo "XS_SIM_DONE $C"; exit 1; fi
+
+echo "########## RUN $C $(date -Is) ##########"
+timeout 20000 ./obj_dir/Vtb +hex=$W/xstop-tb/prog.hex +max_cycles=2000000 > $D/run.log 2>&1
+rrc=$?
+echo "run rc=$rrc $(date -Is)"
+grep -E "^\[TB\]|XSTOP_RESULT" $D/run.log | head -12
+echo "XS_SIM_DONE $C $(date -Is)"

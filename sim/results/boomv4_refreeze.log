@@ -1,0 +1,25 @@
+host=IN-001 start=2026-07-16T16:28:30+08:00
+--- boom patch state ---
+ M src/main/scala/v4/exu/issue-units/issue-unit-banked.scala
+ M src/main/scala/v4/exu/issue-units/issue-unit.scala
+30:  useMatrixIssue: Boolean = false,
+1
+########## SmallBoomV4Config RE-ELABORATE 2026-07-16T16:28:30+08:00 ##########
+SmallBoomV4Config elab rc=0
+  matrix=0 collapsing=4
+########## SmallBoomV4Config BUILD SIM 2026-07-16T16:29:25+08:00 ##########
+SmallBoomV4Config build rc=0
+TESTS SmallBoomV4Config: pass=14 fail=0
+########## MediumBoomV4Config RE-ELABORATE 2026-07-16T16:39:30+08:00 ##########
+MediumBoomV4Config elab rc=0
+  matrix=0 collapsing=4
+########## MediumBoomV4Config BUILD SIM 2026-07-16T16:40:26+08:00 ##########
+MediumBoomV4Config build rc=0
+TESTS MediumBoomV4Config: pass=14 fail=0
+########## LargeBoomV4Config RE-ELABORATE 2026-07-16T16:53:12+08:00 ##########
+LargeBoomV4Config elab rc=0
+  matrix=0 collapsing=4
+########## LargeBoomV4Config BUILD SIM 2026-07-16T16:54:15+08:00 ##########
+LargeBoomV4Config build rc=0
+TESTS LargeBoomV4Config: pass=14 fail=0
+REFREEZE_BOOMV4_DONE 2026-07-16T17:11:32+08:00

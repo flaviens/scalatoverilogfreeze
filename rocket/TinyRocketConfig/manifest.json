@@ -32,5 +32,11 @@
     "flat/ excludes .cc verilator shims and the TestHarness/TestDriver.",
     "Paths in the .f files are rewritten relative to this config directory.",
     "Verified: verilator --lint-only --top-module ChipTop on flat/ reports 0 errors."
-  ]
+  ],
+  "simulation": {
+    "tool": "verilator 5.022 (chipyard TestHarness + riscv-tools/fesvr)",
+    "riscv_tests": "14/14 PASS",
+    "tests_run": "rv64ui-p-{add,simple,lw,sw,beq,jal}, rv64um-p-{mul,div}, rv64ua-p-amoadd_w, rv64uf-p-fadd, rv64ud-p-fadd, rv64mi-p-csr, rv64si-p-csr, rv64uc-p-rvc",
+    "note": "Simulated from this exact frozen RTL (gen-collateral md5 verified identical to rtl/)."
+  }
 }

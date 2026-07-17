@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+#PBS -N cy_sim
+#PBS -q auto_free
+#PBS -l select=1:ncpus=16:mem=50gb
+#PBS -l walltime=12:00:00
+#PBS -j oe
+
+# Build a verilator simulator from the FROZEN chipyard RTL and run RISC-V ISA tests.
+# CONFIG is passed with: qsub -v CONFIG=RocketConfig
+set -uo pipefail
+W=/scratch/flavien/chipyardverilog
+C=${CONFIG:?CONFIG must be set}
+
+export HOME=$W/home
+export TMPDIR=$W/tmp
+export RISCV=$W/rvtools
+CYB=$W/mamba/envs/cy-base
+RVT=$W/mamba/envs/riscv-tools/riscv-tools
+
+source /etc/profile.d/modules.sh 2>/dev/null
+module load git/2.40.0 2>/dev/null
+export PATH=$CYB/bin:$RVT/bin:$RISCV/bin:$W/tools/bin:$W/tools/firtool-1.75.0.d/bin:$PATH:/usr/bin:/bin
+export LD_LIBRARY_PATH=$CYB/lib:$RISCV/lib:${LD_LIBRARY_PATH:-}
+export CC=$CYB/bin/gcc
+export CXX=$CYB/bin/g++
+export FIRTOOL_BIN=$W/tools/firtool-1.75.0.d/bin/firtool
+unset SBT_OPTS
+export JAVA_HEAP_SIZE=32G
+export JAVA_TOOL_OPTIONS="-Xmx32G -Xss256M -Duser.home=$W/home -Djava.io.tmpdir=$W/tmp"
+
+LOG=$W/logs/sim_$C
+mkdir -p $LOG
+echo "host=$(hostname) config=$C start=$(date -Is)"
+verilator --version; $CXX --version | head -1
+
+D=$W/chipyard/sims/verilator/generated-src/chipyard.harness.TestHarness.$C
+# Freeze the elaboration: make the generated RTL newer than every Chisel source so
+# `make` cannot decide to re-elaborate (the BOOM patch would otherwise trigger it)
+# and silently replace the RTL we froze and are trying to test.
+find $D -exec touch {} + 2>/dev/null
+BEFORE=$(cd $D/gen-collateral && find . -maxdepth 1 \( -name '*.sv' -o -name '*.v' \) -print0 | sort -z | xargs -0 cat | md5sum | cut -d' ' -f1)
+echo "rtl_md5_before=$BEFORE"
+
+cd $W/chipyard/sims/verilator
+
+echo "########## BUILD SIM $C $(date -Is) ##########"
+timeout 25000 make -j16 CONFIG=$C > $LOG/build.log 2>&1
+rc=$?
+echo "build rc=$rc $(date -Is)"
+if [ $rc -ne 0 ]; then echo "BUILD FAILED"; grep -iE "error|Error" $LOG/build.log | head -10; fi
+
+AFTER=$(cd $D/gen-collateral && find . -maxdepth 1 \( -name '*.sv' -o -name '*.v' \) -print0 | sort -z | xargs -0 cat | md5sum | cut -d' ' -f1)
+echo "rtl_md5_after=$AFTER"
+[ "$BEFORE" = "$AFTER" ] && echo "RTL_UNCHANGED: yes (simulating exactly the frozen RTL)" || echo "*** RTL_CHANGED -- results would not describe the frozen RTL ***"
+
+SIM=$(ls $W/chipyard/sims/verilator/simulator-chipyard.harness-$C 2>/dev/null | head -1)
+echo "sim binary: $SIM"
+[ -x "$SIM" ] || { echo "NO SIM BINARY"; echo "CY_SIM_DONE $C"; exit 1; }
+
+# Run a representative slice of riscv-tests plus a real benchmark.
+ISA=$RISCV/riscv64-unknown-elf/share/riscv-tests/isa
+TESTS="rv64ui-p-add rv64ui-p-simple rv64ui-p-lw rv64ui-p-sw rv64ui-p-beq rv64ui-p-jal rv64um-p-mul rv64um-p-div rv64ua-p-amoadd_w rv64uf-p-fadd rv64ud-p-fadd rv64mi-p-csr rv64si-p-csr rv64uc-p-rvc"
+pass=0; fail=0; skip=0
+echo "########## RUN TESTS $C $(date -Is) ##########"
+for t in $TESTS; do
+  B=$ISA/$t
+  if [ ! -f "$B" ]; then echo "  SKIP $t (no binary)"; skip=$((skip+1)); continue; fi
+  timeout 900 $SIM +permissive +permissive-off $B > $LOG/$t.out 2>&1
+  trc=$?
+  if [ $trc -eq 0 ]; then echo "  PASS $t"; pass=$((pass+1));
+  else echo "  FAIL $t (rc=$trc)"; tail -3 $LOG/$t.out | sed 's/^/        /'; fail=$((fail+1)); fi
+done
+echo "TESTS $C: pass=$pass fail=$fail skip=$skip"
+echo "CY_SIM_DONE $C $(date -Is)"

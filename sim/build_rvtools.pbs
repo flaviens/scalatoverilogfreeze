@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+#PBS -N rvtools
+#PBS -q auto_free
+#PBS -l select=1:ncpus=16:mem=32gb
+#PBS -l walltime=6:00:00
+#PBS -j oe
+#PBS -o /scratch/flavien/chipyardverilog/logs/build_rvtools.log
+
+set -uo pipefail
+W=/scratch/flavien/chipyardverilog
+export HOME=$W/home
+export TMPDIR=$W/tmp
+export RISCV=$W/rvtools
+export MAMBA_ROOT_PREFIX=$W/mamba
+
+CYB=$W/mamba/envs/cy-base
+RVT=$W/mamba/envs/riscv-tools/riscv-tools
+
+source /etc/profile.d/modules.sh 2>/dev/null
+module load git/2.40.0 2>/dev/null
+
+# conda gcc 13.2 for host builds, riscv gcc for target builds
+export PATH=$CYB/bin:$RVT/bin:$W/tools/bin:$PATH:/usr/bin:/bin
+export CC=$CYB/bin/gcc
+export CXX=$CYB/bin/g++
+export LD_LIBRARY_PATH=$CYB/lib:${LD_LIBRARY_PATH:-}
+
+mkdir -p $RISCV/lib $RISCV/include $W/tmp
+echo "host=$(hostname) start=$(date -Is)"
+echo "gcc: $($CC --version|head -1)"
+echo "riscv gcc: $(riscv64-unknown-elf-gcc --version|head -1)"
+nproc
+
+S=$W/chipyard/toolchains/riscv-tools
+
+# ---------- riscv-isa-sim (spike): gives libriscv + libfesvr ----------
+echo "########## BUILD riscv-isa-sim $(date -Is) ##########"
+B=$W/build/isa-sim
+rm -rf $B; mkdir -p $B; cd $B
+# boost disabled per chipyard (riscv-isa-sim issue #834)
+$S/riscv-isa-sim/configure --prefix=$RISCV --with-boost=no --with-boost-asio=no --with-boost-regex=no > $B/configure.log 2>&1
+rc=$?; echo "configure rc=$rc"; [ $rc -ne 0 ] && tail -15 $B/configure.log
+make -j16 > $B/make.log 2>&1; rc=$?; echo "make rc=$rc"; [ $rc -ne 0 ] && tail -20 $B/make.log
+make install > $B/install.log 2>&1; rc=$?; echo "install rc=$rc"; [ $rc -ne 0 ] && tail -10 $B/install.log
+# chipyard also builds+copies the static fesvr lib explicitly
+make libfesvr.a >> $B/make.log 2>&1 && cp -p $B/libfesvr.a $RISCV/lib/ && echo "libfesvr.a copied"
+echo "--- RISCV/lib ---"; ls $RISCV/lib | head
+
+# ---------- riscv-tests: bare-metal ISA test ELFs ----------
+echo "########## BUILD riscv-tests $(date -Is) ##########"
+cd $S/riscv-tests
+[ -f configure ] || autoconf 2>/dev/null
+B2=$W/build/rv-tests
+rm -rf $B2; mkdir -p $B2; cd $B2
+$S/riscv-tests/configure --prefix=$RISCV/riscv64-unknown-elf --with-xlen=64 > $B2/configure.log 2>&1
+rc=$?; echo "configure rc=$rc"; [ $rc -ne 0 ] && tail -15 $B2/configure.log
+make -j16 > $B2/make.log 2>&1; rc=$?; echo "make rc=$rc"; [ $rc -ne 0 ] && tail -20 $B2/make.log
+make install > $B2/install.log 2>&1; rc=$?; echo "install rc=$rc"; [ $rc -ne 0 ] && tail -10 $B2/install.log
+
+echo "--- isa tests installed ---"
+ls $RISCV/riscv64-unknown-elf/share/riscv-tests/isa 2>/dev/null | head -5
+echo "count: $(ls $RISCV/riscv64-unknown-elf/share/riscv-tests/isa 2>/dev/null | wc -l)"
+echo "--- benchmarks ---"
+ls $RISCV/riscv64-unknown-elf/share/riscv-tests/benchmarks 2>/dev/null | head -5
+echo "RVTOOLS_BUILD_DONE $(date -Is)"

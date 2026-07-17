@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+#PBS -N boomv4_refreeze
+#PBS -q auto_free
+#PBS -l select=1:ncpus=16:mem=60gb
+#PBS -l walltime=12:00:00
+#PBS -j oe
+#PBS -o /scratch/flavien/chipyardverilog/logs/refreeze_boomv4.log
+
+# Re-elaborate all three BOOM v4 configs with BOTH upstream fixes applied
+# (383f241c connect-SNI, cf8e6d7a non-matrix-issue), then rebuild the sims and
+# run ISA tests. The matrix issue unit hangs at runtime (only Large exercises it
+# to failure), so upstream disabled it; re-freezing all three keeps the v4 family
+# on one consistent, functional issue unit.
+set -uo pipefail
+W=/scratch/flavien/chipyardverilog
+
+export HOME=$W/home
+export TMPDIR=$W/tmp
+export RISCV=$W/rvtools
+CYB=$W/mamba/envs/cy-base
+RVT=$W/mamba/envs/riscv-tools/riscv-tools
+
+source /etc/profile.d/modules.sh 2>/dev/null
+module load git/2.40.0 2>/dev/null
+export PATH=$CYB/bin:$RVT/bin:$RISCV/bin:$W/tools/bin:$W/tools/firtool-1.75.0.d/bin:$PATH:/usr/bin:/bin
+export LD_LIBRARY_PATH=$CYB/lib:$RISCV/lib:${LD_LIBRARY_PATH:-}
+export CC=$CYB/bin/gcc
+export CXX=$CYB/bin/g++
+export FIRTOOL_BIN=$W/tools/firtool-1.75.0.d/bin/firtool
+unset SBT_OPTS
+export JAVA_HEAP_SIZE=48G
+export JAVA_TOOL_OPTIONS="-Xmx48G -Xss256M -XX:MaxMetaspaceSize=2G -Duser.home=$W/home -Djava.io.tmpdir=$W/tmp"
+
+echo "host=$(hostname) start=$(date -Is)"
+echo "--- boom patch state ---"
+git -C $W/chipyard/generators/boom status --porcelain
+grep -n "useMatrixIssue: Boolean = false" $W/chipyard/generators/boom/src/main/scala/v4/exu/issue-units/issue-unit.scala
+grep -c "u.io.rob_head := io.rob_head" $W/chipyard/generators/boom/src/main/scala/v4/exu/issue-units/issue-unit-banked.scala
+
+ISA=$RISCV/riscv64-unknown-elf/share/riscv-tests/isa
+TESTS="rv64ui-p-add rv64ui-p-simple rv64ui-p-lw rv64ui-p-sw rv64ui-p-beq rv64ui-p-jal rv64um-p-mul rv64um-p-div rv64ua-p-amoadd_w rv64uf-p-fadd rv64ud-p-fadd rv64mi-p-csr rv64si-p-csr rv64uc-p-rvc"
+
+cd $W/chipyard/sims/verilator
+for C in SmallBoomV4Config MediumBoomV4Config LargeBoomV4Config; do
+  LOG=$W/logs/refreeze_$C; mkdir -p $LOG
+  D=$W/chipyard/sims/verilator/generated-src/chipyard.harness.TestHarness.$C
+  echo "########## $C RE-ELABORATE $(date -Is) ##########"
+  rm -rf $D
+  timeout 20000 make verilog CONFIG=$C > $LOG/elab.log 2>&1
+  rc=$?; echo "$C elab rc=$rc"
+  if [ $rc -ne 0 ]; then echo "$C ELAB FAILED"; grep -iE "error:" $LOG/elab.log|head -5; continue; fi
+  echo "  matrix=$(ls $D/gen-collateral/|grep -icE IssueUnitAgeMatrix) collapsing=$(ls $D/gen-collateral/|grep -icE IssueUnitCollapsing)"
+
+  echo "########## $C BUILD SIM $(date -Is) ##########"
+  timeout 25000 make -j16 CONFIG=$C > $LOG/build.log 2>&1
+  rc=$?; echo "$C build rc=$rc"
+  SIM=$W/chipyard/sims/verilator/simulator-chipyard.harness-$C
+  [ -x "$SIM" ] || { echo "$C NO SIM"; continue; }
+
+  pass=0; fail=0
+  for t in $TESTS; do
+    timeout 900 $SIM +permissive +permissive-off $ISA/$t > $LOG/$t.out 2>&1
+    if [ $? -eq 0 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "  FAIL $t"; fi
+  done
+  echo "TESTS $C: pass=$pass fail=$fail"
+done
+echo "REFREEZE_BOOMV4_DONE $(date -Is)"
