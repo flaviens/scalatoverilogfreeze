@@ -6,10 +6,10 @@ instead of waiting on a Chisel/FIRRTL build every time.
 Every config is checked two ways. **Lint:** `verilator --lint-only` on the flat
 file reports **0 errors** — on Verilator 5.049 (Linux, where it was generated)
 and again on 5.046 (macOS, from the committed files). **Simulation:** every
-Rocket and BOOM config boots and passes 14/14 RISC-V ISA tests; XiangShan builds
-into a working simulator and fetches from its reset vector (see
-[Simulation](#simulation) for the full story). RTL that both lints and runs is a
-much stronger guarantee than "it elaborated".
+Rocket and BOOM config boots and passes 14/14 RISC-V ISA tests, and XiangShan
+runs CoreMark and microbench to completion with every instruction checked against
+NEMU. See [Simulation](#simulation). RTL that both lints and runs is a much
+stronger guarantee than "it elaborated".
 
 ## What's here
 
@@ -21,8 +21,9 @@ much stronger guarantee than "it elaborated".
 | BOOM | `MediumBoomV4Config` | `ChipTop` | 598 | 14/14 | BOOM **v4** (+2 patches) |
 | BOOM | `LargeBoomV4Config` | `ChipTop` | 628 | 14/14 | BOOM **v4** (+2 patches) |
 | BOOM | `LargeBoomV3Config` | `ChipTop` | 615 | 14/14 | BOOM **v3**, kept because much prior work targets v3 |
-| XiangShan | `MinimalConfig` | `XSTop` | 1911 | fetches (see below) | |
-| XiangShan | `DefaultConfig` | `XSTop` | 2009 | fetches (see below) | full Kunminghu-class core |
+| XiangShan | `MinimalConfig` | `XSTop` | 1911 | see note | FPGA-platform top; not runnable standalone |
+| XiangShan | `DefaultConfig` | `XSTop` | 2009 | see note | full Kunminghu-class core |
+| XiangShan | `MinimalConfig` (SimTop) | `SimTop` | — | CoreMark + microbench | in `xiangshan-simtop/`; **this is the one that runs** |
 
 ### Provenance
 
@@ -44,7 +45,18 @@ Exact versions, commits and flags are repeated per config in `manifest.json`.
   meta/                FIRRTL (.fir.gz), device tree (.dts), annotations, regmaps
   *.f                  the generator's own filelists
   manifest.json        versions, commits, toolchain, caveats
+
+xiangshan-simtop/MinimalConfig/     <- the XiangShan variant that RUNS
+  rtl/                 2024 sources for SimTop (core + difftest + sim MMIO/flash)
+  filelist.f, DifftestMacros.svh
+  manifest.json        includes the CoreMark verification evidence
 ```
+
+`xiangshan-simtop/` has no `flat/`: SimTop imports DPI functions (`xs_assert_v2`,
+`DifftestFlash`, …) that difftest's C++ provides, so a flat file can't lint or run
+standalone anyway. Drive it with [sim/xs_simtop_verify.pbs](sim/xs_simtop_verify.pbs),
+which copies `rtl/` into XiangShan's build tree and runs `make emu` **without
+re-running Chisel** (verified: `chisel_runMain_invocations=0`).
 
 Use `flat/` for a quick standalone run; use `rtl/` when you want to touch
 individual modules.
@@ -110,29 +122,52 @@ built from RTL whose `gen-collateral` was checksummed identical to this repo's
 `rtl/` (see [sim/checksum_rtl.sh](sim/checksum_rtl.sh)), so the tests exercise the
 *frozen* Verilog, not a fresh re-elaboration.
 
-**XiangShan — builds, resets, and fetches; does not retire standalone.** XSTop is
-XiangShan's FPGA-platform SoC top and exposes raw AXI4 master ports, not a test
-harness. A standalone testbench ([sim/tb_xstop.sv](sim/tb_xstop.sv)) wraps it in
-an AXI4 DRAM model, points the reset vector at a small program, and watches
-`io_riscv_wfi_0` for completion. Both configs verilate cleanly and, out of reset,
-issue correct instruction fetches to the reset vector through the full L1I → L2 →
-AXI path:
+**XiangShan — runs real workloads, difftest-verified.** Use XiangShan's own
+supported flow ([sim/xs_emu.pbs](sim/xs_emu.pbs)): `make emu` builds `SimTop`
+(the core plus difftest and simulated MMIO/flash) and runs it against NEMU as a
+golden reference, checking **every retired instruction**. On the frozen commit:
+
+```
+coremark-2-iteration : HIT GOOD TRAP @0x80001ca0 — 663,691 instrs, IPC 1.314, 469 iters/sec
+microbench           : HIT GOOD TRAP @0x80003a4e — 326,376 instrs, IPC 0.960
+Core 0's Commit SHA is: 7bf51a8805, dirty: 0
+```
+
+`xiangshan-simtop/` freezes that exact `SimTop` RTL, so experiments can verilate
+known-good XiangShan Verilog without re-running Chisel. Logs:
+[sim/results/](sim/results/).
+
+> **Verilator version matters here.** XiangShan's difftest needs **≥ 5.048** —
+> chipyard's 5.022 pin fails to compile it (`waveform.h` references
+> `VerilatedTraceBaseC`, which didn't exist yet).
+
+**XiangShan `XSTop` — the standalone story.** `XSTop` (in `xiangshan/`) is the
+FPGA-platform top: raw AXI4 master ports, no test harness. A standalone testbench
+([sim/tb_xstop.sv](sim/tb_xstop.sv)) wraps it in an AXI4 DRAM model and points the
+reset vector at a small program. It elaborates, lints clean, comes out of reset
+correctly, and issues correct instruction fetches:
 
 ```
 [AR] mem #1 addr=0x80000000 len=1 size=5   (64-byte burst)
-[AR] mem #2 addr=0x80000040 ...
-[AR] mem #3 addr=0x80000080 ...
-[AR] mem #4 addr=0x800000c0 ...
+[AR] mem #2..#4 addr=0x80000040/80/c0
 ```
 
-…but then the pipeline does not commit — no stores, no WFI, no peripheral polling —
-regardless of reset length (200 vs 5000 cycles is identical). This is a bring-up
-limitation, not an RTL defect: XSTop expects XiangShan's own boot environment
-(`SimTop`/difftest, or the FPGA harness) to finish initialization, which a bare
-AXI memory doesn't provide. The fetch path is proven to elaborate and function;
-full instruction retirement would need XiangShan's harness, which builds a
-*different* top (`SimTop`) than the `XSTop` frozen here. Logs:
-[sim/results/xiangshan_MinimalConfig_XSTop.log](sim/results/xiangshan_MinimalConfig_XSTop.log).
+…but never retires an instruction. Waveform evidence confirms the setup is right:
+`io_reset_vector` = `0x80000000` reaches the core, core reset deasserts at cycle
+202 (frontend 228), and `hartResetReq` is 0 throughout — yet zero instructions
+commit while the design stays highly active. Eliminated with evidence: trap to
+`mtvec`=0 (zero peripheral reads), debug-module reset, JTAG/ndmreset wiring
+(SimTop's exact connections replicated), DFT reset, PMA (init constants present —
+DRAM is executable), test-program bugs (a marker-store program proves *no*
+execution), the Smrnmi/Smdbltrp boot prologue (XiangShan's flash bootrom sets
+`mnstatus.NMIE` and clears `mstatus.MDT`; replicated byte-exactly, no change),
+Verilator defines, and `--ignore-read-enable-mem`.
+
+`XSTop` is booted from flash at `0x10000000` by XiangShan's own harness, not
+directly from DRAM; something in that bring-up isn't reproducible from a bare AXI
+memory. **If you want to simulate XiangShan, use `xiangshan-simtop/` or
+`sim/xs_emu.pbs`** — `xiangshan/` (XSTop) is the clean, difftest-free SoC top,
+useful for reading, formal, and instrumentation, but not runnable standalone today.
 
 ## The two BOOM v4 patches
 

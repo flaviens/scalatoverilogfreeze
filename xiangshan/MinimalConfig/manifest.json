@@ -31,10 +31,32 @@
     "Verified: verilator --lint-only --top-module XSTop on flat/ reports 0 errors."
   ],
   "simulation": {
-    "tool": "verilator 5.022, standalone testbench (sim/tb_xstop.sv) driving XSTop with an AXI4 DRAM model",
-    "result": "PARTIAL \u2014 XSTop builds into a cycle-accurate simulator, comes out of reset, and fetches the reset-vector cachelines (0x80000000/40/80/c0) correctly through its L1I/L2/AXI hierarchy, but does not retire to WFI standalone.",
-    "evidence": "sim/results/xiangshan_MinimalConfig_XSTop.log: 4 memory read bursts at the reset vector, then no commit/store/further-fetch. Reset duration (200 vs 5000 cycles) does not change it; no peripheral polling occurs.",
-    "why": "XSTop is XiangShan's FPGA-platform SoC top and expects XiangShan's own boot environment (SimTop/difftest or the FPGA harness) to complete bring-up; a bare AXI memory is not sufficient to drive it to instruction retirement.",
-    "note": "This is a limitation of standalone bring-up, not of the frozen RTL: the fetch path is proven to elaborate and function. Rocket/BOOM use chipyard's TestHarness+fesvr, which handles bring-up, hence full ISA-test execution there."
+    "supported_flow": {
+      "status": "PASS \u2014 XiangShan RTL at this commit simulates and boots real workloads",
+      "how": "XiangShan's own flow: `make emu` builds SimTop (core + difftest + simulated MMIO/flash) and runs against NEMU as a golden reference, checking every retired instruction.",
+      "results": [
+        "coremark-2-iteration: HIT GOOD TRAP @0x80001ca0, 663,691 instrs, IPC 1.314, CoreMark 469 iters/sec",
+        "microbench: HIT GOOD TRAP @0x80003a4e, 326,376 instrs, IPC 0.960"
+      ],
+      "reproduce": "sim/xs_emu.pbs (note: difftest needs Verilator >= ~5.048; chipyard's 5.022 pin is too old \u2014 waveform.h uses VerilatedTraceBaseC)",
+      "evidence": "sim/results/xiangshan_MinimalConfig_emu_coremark.log, sim/results/xiangshan_MinimalConfig_emu_microbench.log"
+    },
+    "frozen_xstop_standalone": {
+      "status": "PARTIAL \u2014 elaborates, lints clean, resets and fetches correctly, but does not retire from a bare AXI testbench",
+      "verified_working": "Waveform-confirmed: io_reset_vector=0x80000000 reaches the core, core reset deasserts at cycle 202 (frontend 228), hartResetReq=0 throughout, and the frontend issues 4 correct 64B fetches at 0x80000000/40/80/c0 through L1I->L2->AXI.",
+      "symptom": "Zero instructions retired and zero stores, while the design stays highly active (~265k signal transitions per 500 cycles).",
+      "ruled_out": [
+        "trap to mtvec=0 (zero peripheral reads)",
+        "debug module holding the hart (hartResetReq=0 in waveform)",
+        "JTAG/ndmreset wiring (replicated SimTop's exact connections)",
+        "DFT reset (dft_mode/dft_scan_mode both 0, so dft_lgc_rst_n is ignored)",
+        "PMA denying execution (init constants 8'h6F / 46'h20000000000 present; DRAM executable)",
+        "test-program bugs (disassembly verified; marker-store program proves no execution at all)",
+        "missing Smrnmi/Smdbltrp boot prologue (replicated the flash bootrom's mnstatus.NMIE set + mstatus.MDT clear byte-exactly; no change)",
+        "Verilator defines (ENABLE_INITIAL_REG_ is self-defined by the RTL when SYNTHESIS is unset)"
+      ],
+      "note": "XSTop is the FPGA-platform top; XiangShan boots it from flash at 0x10000000, not directly from DRAM. Use the supported `make emu` flow above for a XiangShan simulation that runs.",
+      "testbench": "sim/tb_xstop.sv (AXI4 DRAM model, ndmreset feedback, live TCK, div-100 rtc)"
+    }
   }
 }

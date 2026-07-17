@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+#PBS -N xs_emu
+#PBS -q auto_free
+#PBS -l select=1:ncpus=32:mem=120gb
+#PBS -l walltime=24:00:00
+#PBS -j oe
+#PBS -o /scratch/projects/CFP04/CFP04-SF-105/chipyardverilog/logs/xs_emu.log
+
+# NOTE: XiangShan's difftest requires a newer Verilator than chipyard's 5.022
+# pin (waveform.h references VerilatedTraceBaseC), so this uses its own env.
+# XiangShan's OWN supported simulation flow: `make emu` builds SimTop (the core
+# plus difftest + simulated MMIO/flash) and runs a real workload against NEMU as
+# a reference. This is the flow XiangShan's CI uses, so it exercises the same
+# core RTL through a harness that performs the boot sequence XSTop expects.
+set -uo pipefail
+P=/scratch/projects/CFP04/CFP04-SF-105/chipyardverilog
+CYB=$P/mamba/envs/xs-verilator
+export HOME=$P/home
+export TMPDIR=$P/tmp
+export XDG_CACHE_HOME=$P/home/.cache
+export COURSIER_CACHE=$P/home/.cache/coursier
+export NOOP_HOME=$P/XiangShan
+export NEMU_HOME=$P/XiangShan/ready-to-run
+
+source /etc/profile.d/modules.sh 2>/dev/null
+module load git/2.40.0 2>/dev/null
+module load Java/21.0.2 2>/dev/null
+export PATH=$P/tools:$CYB/bin:$PATH:/usr/bin:/bin
+export LD_LIBRARY_PATH=$CYB/lib:${LD_LIBRARY_PATH:-}
+export CC=$CYB/bin/gcc CXX=$CYB/bin/g++
+# difftest C++ needs zlib/sqlite headers from the conda env
+export CPATH=$CYB/include:${CPATH:-}
+export CPLUS_INCLUDE_PATH=$CYB/include:${CPLUS_INCLUDE_PATH:-}
+export LIBRARY_PATH=$CYB/lib:${LIBRARY_PATH:-}
+# OpenJDK reads user.home from getpwuid(), ignoring $HOME.
+export JAVA_TOOL_OPTIONS="-Duser.home=$P/home -Djava.io.tmpdir=$P/tmp"
+
+echo "host=$(hostname) start=$(date -Is)"
+verilator --version; nproc
+cd $P/XiangShan
+git rev-parse HEAD | sed 's/^/xiangshan_commit=/'
+
+echo "########## make emu (SimTop + difftest) $(date -Is) ##########"
+timeout 70000 make emu CONFIG=MinimalConfig EMU_THREADS=4 WITH_CHISELDB=0 WITH_CONSTANTIN=0 -j32 > $P/logs/xs_emu_build.log 2>&1
+rc=$?
+echo "emu build rc=$rc $(date -Is)"
+if [ $rc -ne 0 ]; then
+  echo "BUILD FAILED"; grep -iE "error|Error:" $P/logs/xs_emu_build.log | head -15
+  echo "XS_EMU_DONE"; exit 1
+fi
+ls -la $P/XiangShan/build/emu 2>&1 | awk '{print "emu binary:", $5, $9}'
+
+echo "########## run coremark $(date -Is) ##########"
+timeout 20000 ./build/emu -b 0 -e 0 -i ./ready-to-run/coremark-2-iteration.bin \
+   --diff ./ready-to-run/riscv64-nemu-interpreter-so > $P/logs/xs_emu_run.log 2>&1
+echo "run rc=$? $(date -Is)"
+tail -30 $P/logs/xs_emu_run.log
+echo "XS_EMU_DONE $(date -Is)"

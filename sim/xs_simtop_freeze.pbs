@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+#PBS -N xs_simtop
+#PBS -q auto_free
+#PBS -l select=1:ncpus=16:mem=100gb
+#PBS -l walltime=12:00:00
+#PBS -j oe
+#PBS -o /scratch/projects/CFP04/CFP04-SF-105/chipyardverilog/logs/xs_simtop.log
+
+# Generate and freeze XiangShan's SimTop RTL -- the variant that provably boots
+# (coremark/microbench, difftest-verified). This is `make sim-verilog`, the same
+# elaboration `make emu` uses, so freezing it lets experiments skip the Chisel/mill
+# step entirely and go straight to verilating known-good XiangShan RTL.
+set -uo pipefail
+P=/scratch/projects/CFP04/CFP04-SF-105/chipyardverilog
+CYB=$P/mamba/envs/xs-verilator
+export HOME=$P/home TMPDIR=$P/tmp
+export XDG_CACHE_HOME=$P/home/.cache COURSIER_CACHE=$P/home/.cache/coursier
+export NOOP_HOME=$P/XiangShan
+
+source /etc/profile.d/modules.sh 2>/dev/null
+module load git/2.40.0 2>/dev/null
+module load Java/21.0.2 2>/dev/null
+export PATH=$P/tools:$CYB/bin:$PATH:/usr/bin:/bin
+export LD_LIBRARY_PATH=$CYB/lib:${LD_LIBRARY_PATH:-}
+export CC=$CYB/bin/gcc CXX=$CYB/bin/g++
+export JAVA_TOOL_OPTIONS="-Duser.home=$P/home -Djava.io.tmpdir=$P/tmp"
+
+echo "host=$(hostname) start=$(date -Is)"
+cd $P/XiangShan
+git checkout -- Makefile 2>/dev/null   # ensure a pristine generator
+git rev-parse HEAD | sed 's/^/xiangshan_commit=/'
+git status --porcelain | head -3
+
+echo "########## make sim-verilog (SimTop) $(date -Is) ##########"
+rm -rf $P/XiangShan/build/rtl
+timeout 30000 make sim-verilog CONFIG=MinimalConfig JVM_XMX=64G JVM_XSS=512m > $P/logs/simtop_elab.log 2>&1
+rc=$?; echo "elab rc=$rc $(date -Is)"
+if [ $rc -ne 0 ]; then echo "FAILED"; grep -iE "error" $P/logs/simtop_elab.log | head -8; echo "SIMTOP_DONE"; exit 1; fi
+
+OUT=$P/out/xiangshan-simtop/MinimalConfig
+rm -rf $OUT; mkdir -p $OUT/rtl $OUT/meta
+cp $P/XiangShan/build/rtl/*.sv $P/XiangShan/build/rtl/*.v $OUT/rtl/ 2>/dev/null
+cp $P/XiangShan/build/rtl/*.f $OUT/ 2>/dev/null
+cp $P/XiangShan/build/rtl/.__diff__ $OUT/meta/git-provenance.txt 2>/dev/null
+rm -f $OUT/rtl/*.fir 2>/dev/null
+
+echo "--- frozen SimTop RTL ---"
+echo "sv: $(ls $OUT/rtl/*.sv 2>/dev/null | wc -l)  v: $(ls $OUT/rtl/*.v 2>/dev/null | wc -l)"
+echo "SimTop.sv: $(ls -la $OUT/rtl/SimTop.sv 2>/dev/null | awk '{print $5}') bytes"
+du -sh $OUT
+echo "SIMTOP_DONE $(date -Is)"

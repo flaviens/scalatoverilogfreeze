@@ -1,10 +1,19 @@
 // Testbench for the FROZEN XiangShan XSTop.
 //
-// XSTop is the FPGA-platform SoC top: it is an AXI4 *master* on both `memory`
-// (48-bit addr, 256-bit data) and `peripheral` (31-bit addr, 64-bit data), and
-// has no difftest instrumentation. To run real code we give it a behavioural
-// AXI4 slave memory preloaded with a program, point io_riscv_rst_vec_0 at it,
-// and use io_riscv_wfi_0 as the completion signal.
+// XSTop is the FPGA-platform SoC top: an AXI4 *master* on both `memory`
+// (48-bit addr, 256-bit data) and `peripheral` (31-bit addr, 64-bit data), with
+// no difftest instrumentation. We give it a behavioural AXI4 slave memory
+// preloaded with a program, point io_riscv_rst_vec_0 at it, and use
+// io_riscv_wfi_0 as the completion signal.
+//
+// The connection mirrors XiangShan's own harness (src/test/scala/top/SimTop.scala):
+//   soc.io.reset := (reset || soc.io.debug_reset).asAsyncReset   <- ndmreset feedback
+//   soc.io.systemjtag.reset := reset.asAsyncReset                <- released with reset
+//   jtag.connect(soc.io.systemjtag.jtag, clock, ...)             <- TCK is a live clock
+//   soc.io.rtc_clock := div100 of soc.io.clock
+// Getting these wrong hangs the core right after its first instruction fetches:
+// the debug module can hold the harts via hartResetReq (hasHartResets=true), and
+// its DMI side is clocked by TCK, so a dead TCK never lets it release them.
 //
 // The program only reaches its final WFI if every arithmetic/branch check
 // passes, so wfi asserting is a positive proof of correct execution.
@@ -15,10 +24,21 @@ module tb;
 
   // ---------------- clock / reset ----------------
   logic clk = 0;
-  logic rst = 1;
+  logic rst = 1;             // testbench-side reset request
   logic rtc = 0;
-  always #1 clk = ~clk;      // 500 MHz nominal
-  always #50 rtc = ~rtc;     // slow RTC for CLINT
+  logic tck = 0;
+  always #1 clk = ~clk;      // core clock, 2ns period
+
+  // rtc_clock is a div100 of the core clock (SimTop: rtcClockDiv = 100)
+  always #100 rtc = ~rtc;
+
+  // The debug module's DMI side is clocked by TCK. It must actually tick, or the
+  // DM never releases the harts and the core stalls after its first fetches.
+  always #10 tck = ~tck;
+
+  // ndmreset feedback: soc.io.reset := (reset || soc.io.debug_reset)
+  wire debug_reset;
+  wire soc_reset = rst | debug_reset;
 
   // ---------------- memory model ----------------
   // 64 MB of DRAM at 0x8000_0000, as 256-bit lines (32 B each).
@@ -74,6 +94,16 @@ module tb;
   wire wfi;
   wire critical_error;
 
+  // RISC-V trace port: the design's own view of what actually retires.
+  wire [2:0]   tr_valid;
+  wire [149:0] tr_iaddr;
+  wire [11:0]  tr_itype;
+  wire [63:0]  tr_cause;
+  wire [49:0]  tr_tval;
+  wire [2:0]   tr_priv;
+  int unsigned retire_groups = 0;
+  int unsigned trap_events = 0;
+
   // ---------------- DUT ----------------
   XSTop dut (
     .nmi_0_0(1'b0), .nmi_0_1(1'b0),
@@ -110,16 +140,16 @@ module tb;
     .memory_rid(memory_rid), .memory_rdata(memory_rdata),
     .memory_rresp(2'b00), .memory_rlast(memory_rlast),
 
-    .io_clock(clk), .io_reset(rst),
+    .io_clock(clk), .io_reset(soc_reset),
     .io_sram_config(16'h0),
     .io_extIntrs(64'h0),
     .io_pll0_lock(1'b1), .io_pll0_ctrl_0(), .io_pll0_ctrl_1(), .io_pll0_ctrl_2(),
     .io_pll0_ctrl_3(), .io_pll0_ctrl_4(), .io_pll0_ctrl_5(),
-    .io_systemjtag_jtag_TCK(1'b0), .io_systemjtag_jtag_TMS(1'b0), .io_systemjtag_jtag_TDI(1'b0),
+    .io_systemjtag_jtag_TCK(tck), .io_systemjtag_jtag_TMS(1'b1), .io_systemjtag_jtag_TDI(1'b0),
     .io_systemjtag_jtag_TDO_data(), .io_systemjtag_jtag_TDO_driven(),
-    .io_systemjtag_reset(1'b1),
+    .io_systemjtag_reset(rst),
     .io_systemjtag_mfr_id(11'h0), .io_systemjtag_part_number(16'h0), .io_systemjtag_version(4'h0),
-    .io_debug_reset(),
+    .io_debug_reset(debug_reset),
     .io_rtc_clock(rtc),
     .io_cacheable_check_req_0_valid(1'b0), .io_cacheable_check_req_0_bits_addr(48'h0),
     .io_cacheable_check_req_0_bits_size(2'h0), .io_cacheable_check_req_0_bits_cmd(3'h0),
@@ -132,12 +162,12 @@ module tb;
     .io_riscv_wfi_0(wfi),
     .io_riscv_critical_error_0(critical_error),
     .io_riscv_rst_vec_0(48'h8000_0000),
-    .io_traceCoreInterface_0_fromEncoder_enable(1'b0),
+    .io_traceCoreInterface_0_fromEncoder_enable(1'b1),
     .io_traceCoreInterface_0_fromEncoder_stall(1'b0),
-    .io_traceCoreInterface_0_toEncoder_cause(), .io_traceCoreInterface_0_toEncoder_tval(),
-    .io_traceCoreInterface_0_toEncoder_priv(), .io_traceCoreInterface_0_toEncoder_mstatus(),
-    .io_traceCoreInterface_0_toEncoder_valid(), .io_traceCoreInterface_0_toEncoder_iaddr(),
-    .io_traceCoreInterface_0_toEncoder_itype(), .io_traceCoreInterface_0_toEncoder_iretire(),
+    .io_traceCoreInterface_0_toEncoder_cause(tr_cause), .io_traceCoreInterface_0_toEncoder_tval(tr_tval),
+    .io_traceCoreInterface_0_toEncoder_priv(tr_priv), .io_traceCoreInterface_0_toEncoder_mstatus(),
+    .io_traceCoreInterface_0_toEncoder_valid(tr_valid), .io_traceCoreInterface_0_toEncoder_iaddr(tr_iaddr),
+    .io_traceCoreInterface_0_toEncoder_itype(tr_itype), .io_traceCoreInterface_0_toEncoder_iretire(),
     .io_traceCoreInterface_0_toEncoder_ilastsize()
   );
 
@@ -151,7 +181,7 @@ module tb;
   logic [47:0] r_addr; logic [7:0] r_len; logic [13:0] r_id; int r_beat;
 
   always @(posedge clk) begin
-    if (rst) begin
+    if (soc_reset) begin
       rstate <= R_IDLE; memory_arready <= 0; memory_rvalid <= 0; memory_rlast <= 0;
     end else begin
       case (rstate)
@@ -161,6 +191,10 @@ module tb;
             r_addr <= memory_araddr; r_len <= memory_arlen; r_id <= memory_arid;
             r_beat <= 0; memory_arready <= 0; rstate <= R_RESP;
             if (first_fetch_line == -1) first_fetch_line = line_of(memory_araddr);
+            mem_ar_count++;
+            if (mem_ar_count <= log_ar)
+              $display("[AR] mem #%0d addr=0x%h len=%0d size=%0d @cyc %0d",
+                       mem_ar_count, memory_araddr, memory_arlen, memory_arsize, cycle);
           end
         end
         R_RESP: begin
@@ -185,7 +219,7 @@ module tb;
   logic [47:0] w_addr; logic [13:0] w_id; int w_beat;
 
   always @(posedge clk) begin
-    if (rst) begin
+    if (soc_reset) begin
       wstate <= W_IDLE; memory_awready <= 0; memory_wready <= 0; memory_bvalid <= 0;
     end else begin
       case (wstate)
@@ -224,7 +258,7 @@ module tb;
   pstate_e prstate = P_IDLE;
 
   always @(posedge clk) begin
-    if (rst) begin
+    if (soc_reset) begin
       peripheral_awready <= 0; peripheral_wready <= 0; peripheral_bvalid <= 0;
       peripheral_arready <= 0; peripheral_rvalid <= 0; peripheral_rlast <= 0;
       prstate <= P_IDLE;
@@ -241,7 +275,10 @@ module tb;
           peripheral_rvalid <= 0; peripheral_rlast <= 0; peripheral_arready <= 1;
           if (peripheral_arvalid && peripheral_arready) begin
             p_len <= peripheral_arlen; p_beat <= 0; peripheral_rid <= peripheral_arid;
-            peripheral_arready <= 0; prstate <= P_RESP;
+            peripheral_arready <= 0; prstate <= P_RESP; periph_reads++;
+            if (periph_reads <= log_ar)
+              $display("[AR] periph read #%0d addr=0x%h @cyc %0d",
+                       periph_reads, peripheral_araddr, cycle);
           end
         end
         P_RESP: begin
@@ -261,33 +298,59 @@ module tb;
   string hexfile;
   longint unsigned max_cycles;
   longint unsigned cycle = 0;
+  int unsigned reset_cycles;
+  int unsigned log_ar;
+  int unsigned periph_reads = 0;
+  int unsigned mem_ar_count = 0;
 
   initial begin
     if (!$value$plusargs("hex=%s", hexfile)) hexfile = "prog.hex";
     if (!$value$plusargs("max_cycles=%d", max_cycles)) max_cycles = 3_000_000;
+    if (!$value$plusargs("reset_cycles=%d", reset_cycles)) reset_cycles = 200;
+    if (!$value$plusargs("log_ar=%d", log_ar)) log_ar = 0;
     foreach (mem[i]) mem[i] = 256'h0;
     $readmemh(hexfile, mem);
     $display("[TB] loaded %s, rst_vec=0x80000000, max_cycles=%0d", hexfile, max_cycles);
     $display("[TB] mem[0]=%h", mem[0]);
     $fflush();
 
-    repeat (200) @(posedge clk);
+    repeat (reset_cycles) @(posedge clk);
     rst <= 0;
     $display("[TB] reset released at %0t", $time);
     $fflush();
   end
 
+  // Trace decode: itype 8..15 are exception/interrupt/trap-return classes in the
+  // RISC-V trace spec; log the first few retire groups and any trap.
+  always @(posedge clk) begin
+    if (!soc_reset) begin
+      if (|tr_valid) begin
+        retire_groups++;
+        if (retire_groups <= log_ar)
+          $display("[TRACE] retire #%0d @cyc %0d valid=%b iaddr0=0x%h itype=0x%h priv=%0d",
+                   retire_groups, cycle, tr_valid, tr_iaddr[49:0], tr_itype, tr_priv);
+      end
+      if (tr_itype != 0 && |tr_valid) begin
+        trap_events++;
+        if (trap_events <= log_ar)
+          $display("[TRAP?] @cyc %0d itype=0x%h cause=0x%h tval=0x%h iaddr0=0x%h",
+                   cycle, tr_itype, tr_cause, tr_tval, tr_iaddr[49:0]);
+      end
+    end
+  end
+
   // heartbeat, so a killed/slow run still shows how far it got
   always @(posedge clk) begin
-    if (!rst && (cycle % 50000 == 0) && cycle > 0) begin
-      $display("[TB] cycle %0d: read_beats=%0d write_beats=%0d first_fetch_line=%0d wfi=%0b",
-               cycle, read_beats, write_beats, first_fetch_line, wfi);
+    if (!soc_reset && (cycle % 50000 == 0) && cycle > 0) begin
+      $display("[TB] cycle %0d: mem_ar=%0d read_beats=%0d write_beats=%0d periph_rd=%0d periph_wr=%0d wfi=%0b dbg_rst=%0b retire=%0d priv=%0d",
+               cycle, mem_ar_count, read_beats, write_beats, periph_reads, periph_writes, wfi, debug_reset,
+               retire_groups, tr_priv);
       $fflush();
     end
   end
 
   always @(posedge clk) begin
-    if (!rst) begin
+    if (!soc_reset) begin
       cycle <= cycle + 1;
 
       if (critical_error) begin

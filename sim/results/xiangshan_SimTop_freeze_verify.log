@@ -1,0 +1,18 @@
+host=IN-006 start=2026-07-17T17:42:07+08:00
+Verilator 5.048 2026-04-26 rev conda-forge build 1
+flat bytes=170223229 modules=2024 SimTop=1
+########## LINT flat SimTop 2026-07-17T17:42:58+08:00 ##########
+lint errors=51
+%Error: /scratch/projects/CFP04/CFP04-SF-105/chipyardverilog/out/xiangshan-simtop/MinimalConfig/flat/SimTop.flat.sv:1559757:11: Can't find definition of task/function: 'xs_assert_v2'
+%Error: /scratch/projects/CFP04/CFP04-SF-105/chipyardverilog/out/xiangshan-simtop/MinimalConfig/flat/SimTop.flat.sv:1559763:11: Can't find definition of task/function: 'xs_assert_v2'
+%Error: /scratch/projects/CFP04/CFP04-SF-105/chipyardverilog/out/xiangshan-simtop/MinimalConfig/flat/SimTop.flat.sv:1559769:11: Can't find definition of task/function: 'xs_assert_v2'
+########## REBUILD emu FROM FROZEN RTL 2026-07-17T17:43:25+08:00 ##########
+emu-from-frozen build rc=0 2026-07-17T18:02:47+08:00
+chisel_runMain_invocations=0
+########## RUN coremark on frozen RTL 2026-07-17T18:02:47+08:00 ##########
+run rc=0 2026-07-17T18:10:08+08:00
+CoreMark Iterations/Sec 469
+Core  0's Commit SHA is: 7bf51a8805, dirty: 0
+Core 0: [32mHIT GOOD TRAP at pc = 0x80001ca0
+[0m[35mCore-0 instrCnt = 663,691, cycleCnt = 505,128, IPC = 1.313907
+STV_DONE 2026-07-17T18:10:08+08:00

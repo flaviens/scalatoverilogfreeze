@@ -1,0 +1,26 @@
+======= Running MicroBench [input *test*] =======
+[qsort] Quick sort: * Passed.
+[queen] Queen placement: * Passed.
+[bf] Brainf**k interpreter: * Passed.
+[fib] Fibonacci number: * Passed.
+[sieve] Eratosthenes sieve: * Passed.
+[15pz] A* 15-puzzle search: * Passed.
+[dinic] Dinic's maxflow algorithm: * Passed.
+[lzip] Lzip compression: * Passed.
+[ssort] Suffix sort: * Passed.
+[md5] MD5 digest: * Passed.
+==================================================
+MicroBench PASS
+Total time: 3148 ms
+emu compiled at Jul 17 2026, 16:50:26
+Using simulated 1048576B flash
+Core  0's Commit SHA is: 7bf51a8805, dirty: 0
+Using simulated 8386560MB RAM
+The image is ./ready-to-run/microbench.bin
+The reference model is ./ready-to-run/riscv64-nemu-interpreter-so
+The first instruction of core 0 has commited. Difftest enabled. 
+Core 0: [32mHIT GOOD TRAP at pc = 0x80003a4e
+[0m[35mCore-0 instrCnt = 326,376, cycleCnt = 339,820, IPC = 0.960438
+[0m[34mSeed=0 Guest cycle spent: 339,826 (this will be different from cycleCnt if emu loads a snapshot)
+[0m[34mHost time spent: 466,597ms
+[0m
