@@ -1,0 +1,37 @@
+# XSCore full-core formal elaboration (yosys)
+
+host=IN-001 start=2026-07-20T14:58:25+08:00
+sv2v rc=0 2026-07-20T15:00:58+08:00
+xscore.v: 68310151 bytes, modules=1515
+yosys rc=0 2026-07-20T15:02:25+08:00
+XSCORE_FV_DONE 2026-07-20T15:02:25+08:00
+
+## design hierarchy (cells incl. submodules), top = XSCore
+        +----------Count including submodules.
+        | 
+  1358824 XSCore
+       46 Backend
+     9325   CtrlBlock
+     3125     DecodeStage
+     7773       DecodeUnit
+       83         UopInfoGen
+       35           indexedLSNumOfUopTable
+       18           strdiedLSNumOfUopTable
+    34617       DecodeUnitComp
+      858         VecExceptionGen
+       11         indexedLSUopTable_1
+       15         indexedLSUopTable_2
+       13         indexedLSUopTable_3
+        7         indexedLSUopTable_4
+       11         indexedLSUopTable_5
+       15         indexedLSUopTable_6
+       16         indexedLSUopTable_7
+        6       PipelineStallReason
+        9       StoreBubbleReason
+       89       VTypeGen
+       28         VsetModule
+    17350     Dispatch
+     7851       BusyTable
+     5508       BusyTable_1
+     2237       BusyTable_2
+      425       BusyTable_3

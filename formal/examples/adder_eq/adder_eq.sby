@@ -1,0 +1,15 @@
+[options]
+mode prove
+depth 1
+
+[engines]
+smtbmc
+
+[script]
+read_verilog Adder_2.v
+read_verilog -sv adder_eq.sv
+prep -top adder_eq
+
+[files]
+Adder_2.v
+adder_eq.sv

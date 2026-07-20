@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+#PBS -N xscore_fv
+#PBS -q auto_free
+#PBS -l select=1:ncpus=16:mem=120gb
+#PBS -l walltime=12:00:00
+#PBS -j oe
+#PBS -o /scratch/projects/CFP04/CFP04-SF-105/chipyardverilog/logs/xscore_formal.log
+
+# Prove the FULL XiangShan core (XSCore cone, 1515 modules) loads into the formal
+# toolchain: sv2v -DSYNTHESIS (drop firtool random-init) -> yosys read + elaborate
+# (hierarchy -top XSCore) + stat. If this elaborates, the whole core is available
+# for formal (BMC / properties / equivalence), not just individual blocks.
+set -uo pipefail
+P=/scratch/projects/CFP04/CFP04-SF-105/chipyardverilog
+D=$P/formal/xscore_cone
+SV2V=/home/svu/flavien/cva6uci_run/tools/sv2v/bin/sv2v
+YOSYS=/home/svu/flavien/compass-scale/oss-cad-suite/bin/yosys
+export HOME=$P/home TMPDIR=$P/tmp
+cd $P/formal
+echo "host=$(hostname) start=$(date -Is)"
+$SV2V --version 2>&1 | head -1; $YOSYS --version 2>&1 | head -1
+
+echo "########## sv2v -DSYNTHESIS (whole core) $(date -Is) ##########"
+ulimit -s unlimited 2>/dev/null
+timeout 20000 $SV2V -DSYNTHESIS --write=$P/formal/xscore.v $D/*.sv $D/*.v > $P/logs/xscore_sv2v.log 2>&1
+rc=$?; echo "sv2v rc=$rc $(date -Is)"
+if [ $rc -ne 0 ]; then echo "SV2V FAILED"; grep -iE "error" $P/logs/xscore_sv2v.log | head -8; echo "XSCORE_FV_DONE"; exit 1; fi
+echo "xscore.v: $(stat -c %s $P/formal/xscore.v) bytes, modules=$(grep -c '^module ' $P/formal/xscore.v)"
+
+echo "########## yosys read + elaborate XSCore $(date -Is) ##########"
+cat > $P/formal/read.ys <<EOF
+read_verilog $P/formal/xscore.v
+hierarchy -check -top XSCore
+stat
+check -assert
+EOF
+timeout 20000 $YOSYS -ql $P/logs/xscore_yosys.log $P/formal/read.ys
+rc=$?; echo "yosys rc=$rc $(date -Is)"
+echo "=== elaboration summary ==="
+grep -iE "error|warning.*not found|referenced in module" $P/logs/xscore_yosys.log | head -8
+grep -A3 "Number of cells" $P/logs/xscore_yosys.log | head -6
+grep -iE "Number of wires|Number of cells|Number of memories" $P/logs/xscore_yosys.log | tail -6
+echo "XSCORE_FV_DONE $(date -Is)"

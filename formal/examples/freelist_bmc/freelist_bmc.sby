@@ -1,0 +1,16 @@
+[options]
+mode bmc
+depth 30
+expect fail
+
+[engines]
+smtbmc
+
+[script]
+read_verilog FreeList.v
+read_verilog -sv freelist_bmc.sv
+prep -top freelist_bmc
+
+[files]
+FreeList.v
+freelist_bmc.sv

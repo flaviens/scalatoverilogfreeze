@@ -105,6 +105,17 @@ from `rtl/` yourself.
 - **XiangShan FIRRTL is not included** (`XSTop.fir` is 1.0–1.5 GB raw). Chipyard's
   is, gzipped, in `meta/`.
 
+## Formal
+
+The XiangShan **core** is set up for formal analysis in [formal/](formal/): the
+`XSCore` cone (Frontend + Backend + MemBlock, L3/NoC/peripherals excluded) is
+carved out of the frozen RTL, and the whole core is proven to load into yosys —
+**1,358,824 cells**, full hierarchy resolved, zero unresolved modules. Includes a
+one-command cone extractor, the sv2v→yosys→SymbiYosys recipe (with the two
+firtool gotchas handled), and two worked examples: an unbounded equivalence proof
+that passes, and a BMC on the rename freelist that finds a real counterexample.
+See [formal/README.md](formal/README.md).
+
 ## Simulation
 
 Beyond linting, the frozen RTL was built into cycle-accurate Verilator simulators

@@ -1,0 +1,6 @@
+# formal build artifacts
+*.v
+examples/*/adder_eq/
+examples/*/freelist_bmc/
+*_cone/
+*.tar.gz
