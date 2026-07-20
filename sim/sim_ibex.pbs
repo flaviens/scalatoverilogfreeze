@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+#PBS -N sim_ibex
+#PBS -q auto_free
+#PBS -l select=1:ncpus=8:mem=16gb
+#PBS -l walltime=4:00:00
+#PBS -j oe
+#PBS -o /scratch/projects/CFP04/CFP04-SF-105/chipyardverilog/logs/sim_ibex.log
+
+# Build a Verilator model of each ibex config (ibex's own simple_system harness,
+# via fusesoc) and run hello_test + CoreMark. The RTL fusesoc exports into its
+# work tree is byte-identical (md5) to the committed ibex/rtl/, so this exercises
+# the frozen Verilog. Mirrors sim_cy.pbs.
+set -uo pipefail
+P=/scratch/projects/CFP04/CFP04-SF-105/chipyardverilog
+E=$P/mamba/envs/ibex
+export HOME=$P/home TMPDIR=$P/tmp
+export PATH=$E/bin:$P/tools/rv32gcc/bin:$PATH
+export CC=$E/bin/gcc CXX=$E/bin/g++
+export CPATH=$E/include LIBRARY_PATH=$E/lib LD_LIBRARY_PATH=$E/lib
+cd $P/ibex
+verilator --version | head -1
+
+# --- software (shared across configs) ---
+# newer binutils needs zicsr/zifencei spelled out in -march; simple_system uses csrr
+make -C examples/sw/simple_system/hello_test clean >/dev/null 2>&1 || true
+make -C examples/sw/simple_system/hello_test CC=riscv32-unknown-elf-gcc ARCH=rv32imc_zicsr_zifencei
+make -C examples/sw/benchmarks/coremark clean >/dev/null 2>&1 || true
+make -C examples/sw/benchmarks/coremark CC=riscv32-unknown-elf-gcc RV_ISA=rv32imc
+HELLO=$P/ibex/examples/sw/simple_system/hello_test/hello_test.elf
+CM=$P/ibex/examples/sw/benchmarks/coremark/coremark.elf
+
+for CFG in small maxperf opentitan; do
+  W=$P/ibex_work/$CFG; rm -rf "$W"; mkdir -p "$W"
+  echo "########## BUILD $CFG $(date -Is) ##########"
+  OPTS=$(python util/ibex_config.py "$CFG" fusesoc_opts)
+  # the sim target adds -Wno-UNOPTFLAT (see note in README); ibex's own build uses -Wall
+  fusesoc --cores-root=. run --work-root="$W/build" --target=sim --setup --build \
+      lowrisc:ibex:ibex_simple_system $OPTS 2>&1 | tail -3
+  SIM="$W/build/Vibex_simple_system"
+  [ -x "$SIM" ] || { echo "BUILD FAILED $CFG"; continue; }
+
+  for prog in "hello:$HELLO" "coremark:$CM"; do
+    name=${prog%%:*}; elf=${prog##*:}
+    echo "########## RUN $CFG $name $(date -Is) ##########"
+    rm -f ibex_simple_system.log
+    "$SIM" --meminit=ram,"$elf" 2>&1 | grep -E "Executed cycles|Instructions Retired"
+    cp ibex_simple_system.log "$P/logs/ibex_${CFG}_${name}.out"
+    grep -E "Hello simple system|CoreMark 1.0|Correct operation|CoreMark / MHz" "$P/logs/ibex_${CFG}_${name}.out" || true
+  done
+done
+echo "SIM_IBEX_DONE $(date -Is)"

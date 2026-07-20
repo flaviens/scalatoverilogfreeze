@@ -1,15 +1,16 @@
-# Frozen Verilog: Rocket, BOOM, XiangShan
+# Frozen Verilog: Rocket, BOOM, XiangShan, Ibex
 
-Pre-elaborated RTL for three RISC-V cores, so experiments can start from Verilog
-instead of waiting on a Chisel/FIRRTL build every time.
+Pre-elaborated RTL for four RISC-V cores, so experiments can start from Verilog
+instead of waiting on a Chisel/FIRRTL (or fusesoc) build every time.
 
 Every config is checked two ways. **Lint:** `verilator --lint-only` on the flat
-file reports **0 errors** — on Verilator 5.049 (Linux, where it was generated)
-and again on 5.046 (macOS, from the committed files). **Simulation:** every
-Rocket and BOOM config boots and passes 14/14 RISC-V ISA tests, and XiangShan
+file reports **0 errors** — on Verilator 5.049/5.048 (Linux, where it was
+generated) and again on 5.046 (macOS, from the committed files). **Simulation:**
+every Rocket and BOOM config boots and passes 14/14 RISC-V ISA tests, XiangShan
 runs CoreMark and microbench to completion with every instruction checked against
-NEMU. See [Simulation](#simulation). RTL that both lints and runs is a much
-stronger guarantee than "it elaborated".
+NEMU, and every Ibex config runs hello_test and CoreMark ("Correct operation
+validated") in Ibex's own Verilator harness. See [Simulation](#simulation). RTL
+that both lints and runs is a much stronger guarantee than "it elaborated".
 
 ## What's here
 
@@ -24,15 +25,22 @@ stronger guarantee than "it elaborated".
 | XiangShan | `MinimalConfig` | `XSTop` | 1911 | see note | FPGA-platform top; not runnable standalone |
 | XiangShan | `DefaultConfig` | `XSTop` | 2009 | see note | full Kunminghu-class core |
 | XiangShan | `MinimalConfig` (SimTop) | `SimTop` | — | CoreMark + microbench | in `xiangshan-simtop/`; **this is the one that runs** |
+| Ibex | `small` | `ibex_top` | 119 | CoreMark | 2-stage RV32IMC, no cache/PMP |
+| Ibex | `maxperf` | `ibex_top` | 119 | CoreMark | 3-stage, branch-target ALU, 1-cycle mul |
+| Ibex | `opentitan` | `ibex_top` | 119 | CoreMark | OpenTitan config: SecureIbex, I$+ECC+scramble, PMP |
+
+Ibex is a single parameterized SystemVerilog core (no Chisel), so its three
+configs share **one** `rtl/` and one `flat/` — a config is a set of build
+parameters, not distinct RTL (see [Layout](#layout)).
 
 ### Provenance
 
-| | Rocket / BOOM | XiangShan |
-|---|---|---|
-| Source | [chipyard](https://github.com/ucb-bar/chipyard) **1.14.0** (`0acc1e1d`) | [XiangShan](https://github.com/OpenXiangShan/XiangShan) master `7bf51a88` (2026-07-16) |
-| Chisel | 6.7.0 (Scala 2.13.16) | 7.3.0 |
-| firtool | CIRCT **1.75.0** (chipyard's pin) | CIRCT **1.135.0** (resolved from Chisel 7.3.0) |
-| Build | `make verilog CONFIG=<cfg>` | `make verilog CONFIG=<cfg>` (`FPGATOP=top.TopMain`) |
+| | Rocket / BOOM | XiangShan | Ibex |
+|---|---|---|---|
+| Source | [chipyard](https://github.com/ucb-bar/chipyard) **1.14.0** (`0acc1e1d`) | [XiangShan](https://github.com/OpenXiangShan/XiangShan) master `7bf51a88` (2026-07-16) | [ibex](https://github.com/lowRISC/ibex) master `8ed87e07` (2026-07-14) |
+| HDL | Chisel 6.7.0 (Scala 2.13.16) | Chisel 7.3.0 | hand-written SystemVerilog |
+| Elaborator | firtool / CIRCT **1.75.0** | firtool / CIRCT **1.135.0** | fusesoc **2.4.3** (no FIRRTL) |
+| Build | `make verilog CONFIG=<cfg>` | `make verilog CONFIG=<cfg>` (`FPGATOP=top.TopMain`) | `fusesoc run --target=sim … $(util/ibex_config.py <cfg> fusesoc_opts)` |
 
 Exact versions, commits and flags are repeated per config in `manifest.json`.
 
@@ -50,7 +58,24 @@ xiangshan-simtop/MinimalConfig/     <- the XiangShan variant that RUNS
   rtl/                 2024 sources for SimTop (core + difftest + sim MMIO/flash)
   filelist.f, DifftestMacros.svh
   manifest.json        includes the CoreMark verification evidence
+
+ibex/                               <- ONE shared tree for all 3 configs
+  rtl/                 143 as-generated sources (core + lowRISC prims + sim harness)
+  rtl/lint/*.vlt       Verilator lint waivers
+  flat/ibex_top.flat.sv  self-contained DUT (ibex_top), `include inlined
+  ibex_top.f           filelist: synthesizable DUT (top ibex_top)
+  ibex_simple_system.f filelist: full sim harness (top ibex_simple_system)
+  configs/<cfg>.params the -G/-D that select small / maxperf / opentitan
+  manifest.json        params + lint + CoreMark evidence for all 3 configs
 ```
+
+Ibex differs from the Chisel cores on purpose: it is hand-written SystemVerilog,
+so a "config" is a set of Verilator `-G`/`-D` build parameters, not a separate
+elaboration. Its `rtl/` and `flat/` were verified **byte-identical (md5) across
+all three configs**, so they are stored once; apply `configs/<cfg>.params` to
+build a specific one. The synthesizable top is `ibex_top` (the ChipTop/XSTop
+analogue); `ibex_simple_system` is Ibex's sim harness (RAM, timer, disassembly
+tracer, DPI program loader).
 
 `xiangshan-simtop/` has no `flat/`: SimTop imports DPI functions (`xs_assert_v2`,
 `DifftestFlash`, …) that difftest's C++ provides, so a flat file can't lint or run
@@ -67,6 +92,10 @@ verilator --lint-only --timing --top-module ChipTop rocket/RocketConfig/flat/Roc
 gunzip -k xiangshan/DefaultConfig/flat/DefaultConfig.flat.sv.gz
 ulimit -s 65520   # see below
 verilator --lint-only --timing --top-module XSTop xiangshan/DefaultConfig/flat/DefaultConfig.flat.sv
+
+# ibex: the flat DUT is self-contained. -Wno-UNOPTFLAT waives a benign
+# false-positive combinational loop (see caveats). scripts/lint_ibex.sh does all 3 tops.
+verilator --lint-only --timing -Wno-UNOPTFLAT -DRVFI=1 --top-module ibex_top ibex/flat/ibex_top.flat.sv
 ```
 
 **Raise the stack limit for XiangShan.** The flat XiangShan files are ~105/161 MB
@@ -94,10 +123,18 @@ from `rtl/` yourself.
 ## Caveats
 
 - **SRAMs are behavioral models** (Chipyard `*_ext` in `top.mems.v`; XiangShan
-  `ram_*.sv`). Good for simulation and formal; they are not PDK macros, so this
-  is not synthesis-ready without replacing them.
-- **`flat/` is ChipTop/XSTop only** — no `TestHarness`, no `TestDriver`, no
-  `SimDRAM`/`SimJTAG` shims. Those live in `rtl/` and the `.f` filelists.
+  `ram_*.sv`; Ibex `prim_generic_ram_*` and the sim `ram_1p`/`ram_2p`). Good for
+  simulation and formal; they are not PDK macros, so this is not synthesis-ready
+  without replacing them.
+- **`flat/` is ChipTop/XSTop/`ibex_top` only** — no `TestHarness`, no
+  `TestDriver`, no `SimDRAM`/`SimJTAG` shims, no Ibex `ibex_simple_system`
+  harness. Those live in `rtl/` and the `.f` filelists.
+- **Ibex needs `-Wno-UNOPTFLAT` to lint on Verilator ≥ 5.048.** It flags a
+  circular combinational path in the ibex controller / CS registers (bit-sliced
+  logic Verilator can't prove acyclic). It is a known false positive that Ibex's
+  own sim build waives too; the design is correct and simulates fine. The full
+  sim harness additionally needs `-Wno-MULTIDRIVEN` for the sim-only disassembly
+  tracer. The synthesizable DUT (`ibex_top`) has neither warning beyond UNOPTFLAT.
 - **XiangShan is `XSTop`, not `SimTop`** — built with `--fpga-platform`, so there
   is no difftest comparison harness.
 - **XiangShan `flat/` files are gzipped.** Raw they are 105 MB and 161 MB, over
@@ -180,6 +217,30 @@ memory. **If you want to simulate XiangShan, use `xiangshan-simtop/` or
 `sim/xs_emu.pbs`** — `xiangshan/` (XSTop) is the clean, difftest-free SoC top,
 useful for reading, formal, and instrumentation, but not runnable standalone today.
 
+**Ibex — hello_test + CoreMark on all three configs.** Each config was built with
+Ibex's own `simple_system` Verilator harness (fusesoc `--target=sim`) and run on
+two programs: `hello_test` (prints, services timer interrupts, clean `$finish`)
+and CoreMark (10 iterations, `rv32imc`, built with the lowRISC rv32imcb GCC). All
+three configs report **"Correct operation validated"** — CoreMark's own CRC
+self-check — proving the core computes correctly, not just that it runs:
+
+```
+small     : CoreMark 1.0 = 1.21 / MHz = 2.43   (4,189,519 cycles, 2,754,578 instrs retired)
+maxperf   : CoreMark 1.0 = 1.54 / MHz = 3.08   (3,309,016 cycles)
+opentitan : CoreMark 1.0 = 1.54 / MHz = 3.07   (3,320,530 cycles; I$/PMP/Secure all on)
+```
+
+The RTL fusesoc exports into its build tree was checksummed **byte-identical
+(md5) to the committed `ibex/rtl/`** — all 151 sources — so these numbers come
+from the *frozen* Verilog. Build+run with [sim/sim_ibex.pbs](sim/sim_ibex.pbs);
+raw logs in [sim/results/](sim/results/) (`ibex_*.simlog`, `ibex_*_coremark.out`).
+
+> **Two toolchain notes for Ibex.** (1) The SW needs a real **rv32** GCC — the
+> `riscv-tools` rv64 GCC has no rv32 multilib, so CoreMark fails to link
+> (`__ltdf2`, `libgcc.a` ELFCLASS mismatch). `setup_ibex.sh` fetches lowRISC's
+> `gcc-rv32imcb` toolchain. (2) newer binutils wants `zicsr`/`zifencei` spelled
+> out in `-march` (e.g. `rv32imc_zicsr_zifencei`) or `csrr` won't assemble.
+
 ## The two BOOM v4 patches
 
 chipyard 1.14.0's pinned BOOM (`5223e44c`) has two bugs in the v4 issue unit that
@@ -222,6 +283,12 @@ check). `sim/` holds the simulation harness: `build_rvtools.pbs` (spike/`libfesv
 + `riscv-tests`), `sim_cy.pbs` (build+run the chipyard configs), `tb_xstop.sv` +
 `sim_xs.pbs` (the XiangShan testbench), and `checksum_rtl.sh` (proves the sim ran
 the frozen RTL). The two BOOM patches live in `scripts/patches/`.
+
+Ibex has its own trio: [scripts/setup_ibex.sh](scripts/setup_ibex.sh) (ibex +
+Verilator/fusesoc env + the rv32 GCC), [scripts/collect_ibex.sh](scripts/collect_ibex.sh)
+(stage `rtl/`/`flat/`/filelists and re-lint), [scripts/lint_ibex.sh](scripts/lint_ibex.sh)
+(lint the committed tree — flat DUT, rtl DUT, rtl harness), and
+[sim/sim_ibex.pbs](sim/sim_ibex.pbs) (build+run hello + CoreMark).
 
 Build environment notes, which cost some time to work out on `vanda`:
 

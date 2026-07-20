@@ -1,0 +1,14 @@
+config=small  toplevel=ibex_simple_system
+Verilator 5.048 2026-04-26 rev conda-forge build 1
+sw_gcc=riscv32-unknown-elf-gcc 10.2.0 (lowRISC rv32imcb-20250710-1)
+build_rc=0
+sim: 13096952 /scratch/projects/CFP04/CFP04-SF-105/chipyardverilog/ibex_work/small/build/Vibex_simple_system
+########## hello_test ##########
+/scratch/projects/CFP04/CFP04-SF-105/chipyardverilog/logs/ibex_small_hello.out:Hello simple system
+/scratch/projects/CFP04/CFP04-SF-105/chipyardverilog/logs/ibex_small.log:Instructions Retired: 261
+########## coremark (10 iter, rv32imc) ##########
+Iterations/Sec   : 1.214825
+Correct operation validated. See README.md for run and reporting rules.
+CoreMark 1.0 : 1.214825 / GCC  / STACK
+CoreMark / MHz: 2.429650
+IBEX_SIM_DONE small

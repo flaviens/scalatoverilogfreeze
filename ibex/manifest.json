@@ -1,0 +1,69 @@
+{
+  "design": "ibex",
+  "top_module": "ibex_top",
+  "harness_top": "ibex_simple_system",
+  "shared_rtl": true,
+  "shared_rtl_note": "ibex is a single parameterized SystemVerilog core (no Chisel/FIRRTL). Every configuration elaborates from the SAME rtl/ sources; a 'config' is a set of -G parameters / -D defines applied at build time, not a distinct RTL. rtl/ and flat/ were verified byte-identical (md5) across all three configs, so they are stored once here and each config is captured by configs/<config>.params.",
+  "generator": {
+    "repo": "https://github.com/lowRISC/ibex",
+    "commit": "8ed87e07e3331561bce93af1568d9b376948e701",
+    "commit_date": "2026-07-14T04:45:23+00:00",
+    "fusesoc": "2.4.3",
+    "config_source": "ibex_configs.yaml",
+    "build_command": "fusesoc --cores-root=. run --target=sim --setup --build lowrisc:ibex:ibex_simple_system $(util/ibex_config.py <config> fusesoc_opts)"
+  },
+  "toolchain": {
+    "verilator": "Verilator 5.048 2026-04-26 rev conda-forge build 1",
+    "sw_gcc": "riscv32-unknown-elf-gcc 10.2.0 (lowRISC lowrisc-toolchain-gcc-rv32imcb-20250710-1)"
+  },
+  "frozen_on": "2026-07-20",
+  "configs": {
+    "small": {
+      "description": "smallest supported ibex: 2-stage pipeline, RV32IMC, fast (multi-cycle) multiplier, no cache, no PMP",
+      "params_file": "configs/small.params",
+      "key_params": "RV32M=RV32MFast, RV32ZC=Zca, ICache=0, WritebackStage=0, BranchTargetALU=0, SecureIbex=0, PMPEnable=0, MHPMCounterNum=0"
+    },
+    "maxperf": {
+      "description": "max-performance ibex: 3-stage pipeline (writeback stage), single-cycle multiplier, branch-target ALU, RV32IMC + Zcb/Zcmp; no cache, no PMP, no security",
+      "params_file": "configs/maxperf.params",
+      "key_params": "RV32M=RV32MSingleCycle, RV32ZC=ZcaZcbZcmp, BranchTargetALU=1, WritebackStage=1, ICache=0, SecureIbex=0, PMPEnable=0"
+    },
+    "opentitan": {
+      "description": "the config used in OpenTitan Earl Grey: security-hardened (SecureIbex, dual-core lockstep), ICache with ECC + scrambling, PMP (16 regions), bitmanip RV32BOTEarlGrey, 10 HPM counters, debug triggers",
+      "params_file": "configs/opentitan.params",
+      "key_params": "RV32M=RV32MSingleCycle, RV32B=RV32BOTEarlGrey, ICache=1, ICacheECC=1, ICacheScramble=1, SecureIbex=1, PMPEnable=1, PMPNumRegions=16, DbgTriggerEn=1, MHPMCounterNum=10"
+    }
+  },
+  "contents": {
+    "rtl/": "143 as-generated SystemVerilog sources for ibex_simple_system (core + lowRISC prim library + sim RAM/timer/bus/tracer harness), one module per file. rtl/lint/*.vlt are the Verilator lint waivers. `+incdir+rtl` resolves the `include headers (prim_assert.sv, prim_secded_inc.svh, prim_util_memload.svh, ...).",
+    "flat/ibex_top.flat.sv": "single self-contained file: the synthesizable DUT ibex_top (119 modules), Verilator-preprocessed so every `include is inlined and macros expanded; lints standalone with no +incdir. This is the ChipTop/XSTop analogue for ibex.",
+    "ibex_simple_system.f": "filelist: full Verilator sim (top ibex_simple_system) = ibex_top + sim RAM/timer/bus + disassembly tracer + memutil-DPI loader harness.",
+    "ibex_top.f": "filelist: synthesizable DUT only (top ibex_top), sim-only modules removed.",
+    "configs/<config>.params": "the -G parameters and -D defines that select this configuration; pass them to Verilator/your tool on top of a filelist.",
+    "meta/": "rtl_order.txt (build order), waivers.txt, and the three lint logs (flat, DUT, harness)."
+  },
+  "notes": [
+    "flat/ is the DUT ibex_top only (no sim harness), mirroring the ChipTop/XSTop convention of the other cores here. The -D RV32M/RV32B/RV32ZC/RegFile defines do NOT change ibex_top's body (they only set parameters at the ibex_simple_system level), so a single flat file covers all three configs; apply configs/<config>.params to elaborate a specific one.",
+    "Verilator 5.048 flags a benign UNOPTFLAT (circular combinational logic over bit-slices in ibex_controller / ibex_cs_registers) - a known false positive that ibex's own simple_system build also waives. Lint and the flat file are checked with -Wno-UNOPTFLAT.",
+    "The full sim harness (ibex_simple_system.f) additionally needs -Wno-MULTIDRIVEN for the sim-only disassembly tracer (ibex_tracer.sv); the synthesizable DUT has no such warning.",
+    "SRAMs are behavioral models (prim_generic_ram_*, sim ram_1p/ram_2p). Good for simulation/formal; not PDK macros.",
+    "ibex is hand-written SystemVerilog (no Chisel/FIRRTL), so there is no .fir/.dts to include.",
+    "Built with -DRVFI=1 so the RISC-V Formal Interface tracer ports are present, as ibex's simple_system uses."
+  ],
+  "lint": {
+    "tool": "Verilator 5.048 2026-04-26 rev conda-forge build 1",
+    "flat_dut_top_ibex_top": "0 errors, 0 warnings (-Wno-UNOPTFLAT)",
+    "rtl_dut_top_ibex_top": "0 errors, 0 warnings (-Wno-UNOPTFLAT)",
+    "rtl_harness_top_ibex_simple_system": "0 errors, 0 warnings (-Wno-UNOPTFLAT -Wno-MULTIDRIVEN)"
+  },
+  "simulation": {
+    "tool": "Verilator 5.048, ibex_simple_system harness (fusesoc target=sim)",
+    "hello_test": "PASS on all 3 configs - prints 'Hello simple system', services timer interrupts, clean $finish (261 instrs retired)",
+    "coremark": {
+      "note": "CoreMark 10 iterations, rv32imc, -O3, built with the lowRISC rv32imcb gcc. 'Correct operation validated' (CRC self-check) on all three configs.",
+      "small":     { "coremark_1.0": 1.214825, "coremark_per_mhz": 2.429650, "cycles": 4189519, "instructions_retired": 2754578 },
+      "maxperf":   { "coremark_1.0": 1.539097, "coremark_per_mhz": 3.078193, "cycles": 3309016, "instructions_retired": 2754578 },
+      "opentitan": { "coremark_1.0": 1.536270, "coremark_per_mhz": 3.072540, "cycles": 3320530, "instructions_retired": 2754578 }
+    }
+  }
+}
