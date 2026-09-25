@@ -3,19 +3,16 @@
 Pre-elaborated RTL for four RISC-V cores, so experiments can start from Verilog
 instead of waiting on a Chisel/FIRRTL (or fusesoc) build every time.
 
-Every config is checked two ways. **Lint:** `verilator --lint-only` on the flat
-file reports **0 errors** — on Verilator 5.049/5.048 (Linux, where it was
-generated) and again on 5.046 (macOS, from the committed files). **Simulation:**
-every Rocket and BOOM config boots and passes 14/14 RISC-V ISA tests, XiangShan
-runs CoreMark and microbench to completion with every instruction checked against
-NEMU, and every Ibex config runs hello_test and CoreMark ("Correct operation
-validated") in Ibex's own Verilator harness. See [Simulation](#simulation). RTL
-that both lints and runs is a much stronger guarantee than "it elaborated".
+**XiangShan updated 25 September 2026:** [xiangshan-kunminghu-v3/](xiangshan-kunminghu-v3/) contains fresh MinimalConfig and DefaultConfig XSTop RTL from upstream `kunminghu-v3` commit `aa6b52033`. Both configurations elaborate and pass Verilator 5.052 lint. Simulation has not been run on these new snapshots. Their manifests record exact dependencies with per-file hashes.
+
+The July snapshots remain in their existing directories with their original validation evidence. Every Rocket and BOOM config passes 14/14 RISC-V ISA tests. The July XiangShan SimTop passes CoreMark and microbench against NEMU. Each Ibex config passes hello_test and CoreMark. See [Simulation](#simulation); those results apply to the revisions recorded there.
 
 ## What's here
 
 | Design | Config | Top | Modules (flat) | ISA tests | Notes |
 |---|---|---|---|---|---|
+| XiangShan Kunminghu-V3 (September) | `MinimalConfig` | `XSTop` | 1896 | not run | current snapshot in `xiangshan-kunminghu-v3/`; lint passed |
+| XiangShan Kunminghu-V3 (September) | `DefaultConfig` | `XSTop` | 2004 | not run | current snapshot in `xiangshan-kunminghu-v3/`; lint passed |
 | Rocket | `RocketConfig` | `ChipTop` | 432 | 14/14 | dual-core RV64GC |
 | Rocket | `TinyRocketConfig` | `ChipTop` | 278 | 14/14 | smallest Rocket |
 | BOOM | `SmallBoomV4Config` | `ChipTop` | 595 | 14/14 | BOOM **v4** (+2 patches) |
@@ -35,6 +32,8 @@ parameters, not distinct RTL (see [Layout](#layout)).
 
 ### Provenance
 
+The September XiangShan snapshots use upstream `kunminghu-v3` commit `aa6b52033add528a504bdb2c2b726100d89f070a` (24 September 2026). Elaboration uses Chisel 7.13.0 with firtool 1.149.0. The generator runs under Temurin JDK 21.0.8+9 using Mill 0.12.17 with Scala 2.13.17. See the [refresh notes](xiangshan-kunminghu-v3/README.md). The table below describes the preserved July snapshots.
+
 | | Rocket / BOOM | XiangShan | Ibex |
 |---|---|---|---|
 | Source | [chipyard](https://github.com/ucb-bar/chipyard) **1.14.0** (`0acc1e1d`) | [XiangShan](https://github.com/OpenXiangShan/XiangShan) master `7bf51a88` (2026-07-16) | [ibex](https://github.com/lowRISC/ibex) master `8ed87e07` (2026-07-14) |
@@ -45,6 +44,8 @@ parameters, not distinct RTL (see [Layout](#layout)).
 Exact versions, commits and flags are repeated per config in `manifest.json`.
 
 ## Layout
+
+The current XiangShan snapshot is under `xiangshan-kunminghu-v3/<Config>/`. Its `files.f` is a complete portable list; `filelist.f` preserves the original generator output. Its `meta/` directory includes SHA-256 hashes with dependency revisions. The older layout below remains available for reproducibility.
 
 ```
 <design>/<Config>/
