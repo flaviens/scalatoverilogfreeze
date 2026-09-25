@@ -1,0 +1,16 @@
+commit aa6b52033add528a504bdb2c2b726100d89f070a
+Author:     Zhihao Xu <ngc7331@outlook.com>
+AuthorDate: Thu Sep 24 14:23:39 2026 +0800
+Commit:     GitHub <noreply@github.com>
+CommitDate: Thu Sep 24 14:23:39 2026 +0800
+
+    timing(ubtb): check hit in t1 (#6489)
+    
+    After #6237, a critical path is introduced: bpu t0_ready -> ubtb
+    t0_target -> t1_hitTargetSame
+    
+    This PR moves hit-checking logic to t1 and remove t1->t0 forward logic
+    
+    ---------
+    
+    Signed-off-by: ngc7331 <ngc7331@outlook.com>

@@ -1,0 +1,51 @@
+{
+  "design": "xiangshan",
+  "config": "DefaultConfig",
+  "top_module": "XSTop",
+  "generator": {
+    "repo": "https://github.com/OpenXiangShan/XiangShan",
+    "branch": "kunminghu-v3",
+    "commit": "aa6b52033add528a504bdb2c2b726100d89f070a",
+    "commit_date": "2026-09-24T14:23:39+08:00"
+  },
+  "toolchain": {
+    "firtool": "1.149.0",
+    "chisel": "7.13.0",
+    "scala": "2.13.17",
+    "mill": "0.12.17",
+    "jdk": "Eclipse Temurin 21.0.8+9"
+  },
+  "build_command": "make verilog CONFIG=DefaultConfig BUILD_DIR=<isolated-build-directory> JVM_XMX=64G JVM_XSS=256m",
+  "frozen_on": "2026-09-25T06:26:53.141037+00:00",
+  "contents": {
+    "rtl_files": 2004,
+    "modules": 2004,
+    "files.f": "Complete portable HDL file list",
+    "filelist.f": "Original generator file list",
+    "rtl_hashes": "meta/rtl-sha256.json",
+    "submodule_commits": "meta/submodules.txt",
+    "flat_sha256": "b400374c2e31a01d801fca1538abcabb5f21430347562b94c5707e9a0ec3f22a"
+  },
+  "validation": {
+    "elaboration": "PASS",
+    "source_dirty": false,
+    "lint": {
+      "status": "PASS",
+      "version": "Verilator 5.052 2026-09-05",
+      "command": "verilator --lint-only --timing -Wno-fatal --top-module XSTop -f files.f",
+      "errors": 0,
+      "warnings_nonfatal": true,
+      "log": "meta/verilator-lint.log"
+    },
+    "simulation": {
+      "status": "NOT RUN",
+      "note": "Historical CoreMark results apply only to the July 2026 SimTop snapshot."
+    }
+  },
+  "notes": [
+    "Stock FPGA-platform XSTop; behavioral SRAM models.",
+    "The complete files.f includes every emitted HDL file. The original filelist.f is retained for provenance.",
+    "FIRRTL is omitted because of its size. The standalone flattened HDL is gzip-compressed.",
+    "No whole-core formal verification claim. Leaf-module checks are described separately."
+  ]
+}

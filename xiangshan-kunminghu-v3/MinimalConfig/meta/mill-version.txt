@@ -1,0 +1,5 @@
+Picked up JAVA_TOOL_OPTIONS: -XX:ActiveProcessorCount=16
+Mill Build Tool version 0.12.17
+Java version: 21.0.8, vendor: Eclipse Adoptium, runtime: /home/flavien/xsmodel-20260925/tools/jdk-21.0.8+9
+Default locale: en, platform encoding: UTF-8
+OS name: "Linux", version: 4.18.0-553.120.1.el8_10.x86_64, arch: amd64
